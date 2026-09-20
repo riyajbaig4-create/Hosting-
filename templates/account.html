@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Account Profile — {{ vip_site_name }}{% endblock %}
+
+{% block content %}
+<div class="container-mobile" style="max-width: 680px;">
+
+  <!-- 1. Account Header Overview Card -->
+  <div class="vip-card" style="padding: 24px; margin-bottom: 20px;">
+    <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+      
+      <!-- Interactive Clickable Avatar (Circular Frame with Camera Overlay) -->
+      <div style="position: relative; width: 78px; height: 78px; flex-shrink: 0;">
+        <label for="quick_avatar_input" style="cursor: pointer; display: block; width: 100%; height: 100%; margin: 0;" title="Click to upload profile picture from your device">
+          <div style="width: 78px; height: 78px; border-radius: 50%; overflow: hidden; background: var(--primary-grad); color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 1.85rem; font-weight: 800; border: 3px solid #EDE9FE; box-shadow: 0 4px 16px rgba(124, 58, 237, 0.25); transition: transform 0.18s ease, box-shadow 0.18s ease;">
+            {% if user.avatar_url %}
+            <img src="{{ user.avatar_url }}" alt="{{ user.full_name }}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+            {% else %}
+            <span>{{ user.full_name[0]|upper if user.full_name else (user.username[0]|upper) }}</span>
+            {% endif %}
+          </div>
+          
+          <!-- Camera badge indicator -->
+          <div style="position: absolute; bottom: 0; right: 0; width: 26px; height: 26px; border-radius: 50%; background: #7C3AED; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; border: 2px solid #FFFFFF; box-shadow: 0 2px 6px rgba(0,0,0,0.18);">
+            📷
+          </div>
+        </label>
+
+        <!-- Hidden quick upload form -->
+        <form id="quick_avatar_form" action="{{ url_for('account') }}" method="POST" enctype="multipart/form-data" style="display: none;">
+          <input type="hidden" name="action" value="upload_avatar">
+          <input type="file" id="quick_avatar_input" name="avatar" accept="image/png, image/jpeg, image/jpg, image/webp, image/gif, image/svg+xml" onchange="document.getElementById('quick_avatar_form').submit();">
+        </form>
+      </div>
+
+      <!-- Clean Header: Full Name and Active Status Badge ONLY -->
+      <div style="flex: 1; min-width: 200px;">
+        <h1 style="font-size: 1.45rem; font-weight: 800; color: #0F172A; line-height: 1.25; margin: 0 0 8px 0;">
+          {{ user.full_name }}
+        </h1>
+        <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.775rem; font-weight: 700; background: #ECFDF5; color: #059669; padding: 3px 10px; border-radius: 9999px; border: 1px solid #A7F3D0;">
+          <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #10B981;"></span>
+          Status: {{ user.status|capitalize }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Account Details Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; background: #F8FAFC; border-radius: 12px; padding: 14px; font-size: 0.825rem;">
+      <div>
+        <span style="color: #64748B; display: block; margin-bottom: 2px;">Registered:</span>
+        <strong style="color: #0F172A;">{{ user.created_at }}</strong>
+      </div>
+      <div>
+        <span style="color: #64748B; display: block; margin-bottom: 2px;">Coin Balance:</span>
+        <strong style="color: #B45309;">🪙 {{ user.coins }} Coins</strong>
+      </div>
+      <div>
+        <span style="color: #64748B; display: block; margin-bottom: 2px;">Account Role:</span>
+        <strong style="color: #4F46E5;">{{ user.role|capitalize }}</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Profile Picture & Logo Upload Feature -->
+  <div class="vip-card" style="padding: 24px; margin-bottom: 20px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex-wrap: wrap; gap: 10px;">
+      <h2 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0;">
+        Profile Picture & Logo
+      </h2>
+      {% if user.avatar_url %}
+      <span style="font-size: 0.75rem; font-weight: 700; background: #EEF2FF; color: #4F46E5; padding: 2px 8px; border-radius: 6px;">
+        Custom Avatar Active
+      </span>
+      {% endif %}
+    </div>
+    <p style="font-size: 0.825rem; color: #64748B; margin-bottom: 18px;">
+      Upload a personalized avatar or logo directly from your device gallery or file manager. Your picture is securely isolated to your account.
+    </p>
+
+    <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; padding: 18px; margin-bottom: 16px;">
+      <!-- Circular Preview Frame -->
+      <div style="position: relative; width: 70px; height: 70px; flex-shrink: 0;">
+        <div id="avatar_preview_container" style="width: 70px; height: 70px; border-radius: 50%; overflow: hidden; background: var(--primary-grad); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.7rem; font-weight: 800; border: 2px solid #DDD6FE; box-shadow: 0 2px 10px rgba(124, 58, 237, 0.2);">
+          {% if user.avatar_url %}
+          <img id="avatar_preview_img" src="{{ user.avatar_url }}" alt="{{ user.full_name }}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+          {% else %}
+          <span id="avatar_preview_letter">{{ user.full_name[0]|upper if user.full_name else (user.username[0]|upper) }}</span>
+          <img id="avatar_preview_img" src="" alt="Preview" style="display: none; width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Upload Actions -->
+      <div style="flex: 1; min-width: 220px;">
+        <form action="{{ url_for('account') }}" method="POST" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 10px;">
+          <input type="hidden" name="action" value="upload_avatar">
+          
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <label class="btn-secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin: 0;">
+              <span>📁 Choose Image</span>
+              <input type="file" id="dedicated_avatar_input" name="avatar" accept="image/png, image/jpeg, image/jpg, image/webp, image/gif, image/svg+xml" style="display: none;" onchange="handleFilePreview(this)">
+            </label>
+
+            <button type="submit" id="upload_avatar_submit_btn" class="btn-primary" style="padding: 8px 18px; font-size: 0.85rem; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+              <span>⬆️ Upload Logo</span>
+            </button>
+          </div>
+
+          <div id="selected_file_name" style="font-size: 0.775rem; color: #475569; font-weight: 600; min-height: 16px;">
+            Supported: PNG, JPG, JPEG, WEBP, GIF, SVG (Max 5MB)
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if user.avatar_url %}
+    <form action="{{ url_for('account') }}" method="POST" onsubmit="return confirm('Are you sure you want to remove your profile picture and restore the default avatar?');">
+      <input type="hidden" name="action" value="remove_avatar">
+      <button type="submit" style="background: none; border: 1px solid #FECACA; color: #DC2626; padding: 6px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: background 0.15s ease;">
+        🗑️ Remove Profile Picture (Restore Default)
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  <!-- 3. Edit Profile Information Form -->
+  <div class="vip-card" style="padding: 24px; margin-bottom: 20px;">
+    <h2 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin-bottom: 16px;">
+      Edit Profile Information
+    </h2>
+
+    <form action="{{ url_for('account') }}" method="POST">
+      <input type="hidden" name="action" value="update_profile">
+
+      <div class="form-group">
+        <label class="form-label" for="full_name">Full Name</label>
+        <input type="text" id="full_name" name="full_name" class="form-control" value="{{ user.full_name }}" required>
+        <span style="font-size: 0.75rem; color: #64748B; margin-top: 4px; display: block;">
+          Your display name shown on your servers and dashboard.
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="username">Username</label>
+        <input 
+          type="text" 
+          id="username" 
+          name="username" 
+          class="form-control" 
+          value="{{ user.username }}" 
+          {% if user.role != 'admin' %}readonly style="background: #F8FAFC; color: #64748B; cursor: not-allowed; border-color: #E2E8F0;"{% endif %}
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="email">Gmail Address</label>
+        <input 
+          type="email" 
+          id="email" 
+          name="email" 
+          class="form-control" 
+          value="{{ user.email }}" 
+          {% if user.role != 'admin' %}readonly style="background: #F8FAFC; color: #64748B; cursor: not-allowed; border-color: #E2E8F0;"{% endif %}
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="bio">Bio / Notes</label>
+        <input type="text" id="bio" name="bio" class="form-control" placeholder="Python Developer / Bot Creator" value="{{ user.bio or '' }}">
+      </div>
+
+      <button type="submit" class="btn-primary" style="padding: 10px 24px; font-weight: 700;">
+        Save Profile Changes
+      </button>
+    </form>
+  </div>
+
+  <!-- 4. Change Password Form -->
+  <div class="vip-card" style="padding: 24px; margin-bottom: 20px;">
+    <h2 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin-bottom: 4px;">
+      Change Password
+    </h2>
+    <p style="font-size: 0.825rem; color: #64748B; margin-bottom: 16px;">Ensure your account is protected with a secure password.</p>
+
+    <form action="{{ url_for('account') }}" method="POST">
+      <input type="hidden" name="action" value="change_password">
+
+      <div class="form-group">
+        <label class="form-label" for="current_password">Current Password</label>
+        <input type="password" id="current_password" name="current_password" class="form-control" placeholder="••••••••" required autocomplete="current-password">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="new_password">New Password (min. 6 characters)</label>
+        <input type="password" id="new_password" name="new_password" class="form-control" placeholder="••••••••" required minlength="6" autocomplete="new-password">
+      </div>
+
+      <div class="form-group" style="margin-bottom: 20px;">
+        <label class="form-label" for="confirm_new_password">Confirm New Password</label>
+        <input type="password" id="confirm_new_password" name="confirm_new_password" class="form-control" placeholder="••••••••" required minlength="6" autocomplete="new-password">
+      </div>
+
+      <button type="submit" class="btn-secondary" style="padding: 10px 24px; font-weight: 700;">
+        Update Password
+      </button>
+    </form>
+  </div>
+
+</div>
+
+<script>
+function handleFilePreview(input) {
+  if (input.files && input.files[0]) {
+    const file = input.files[0];
+    const fileNameDisplay = document.getElementById('selected_file_name');
+    if (fileNameDisplay) {
+      fileNameDisplay.textContent = 'Selected: ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+      fileNameDisplay.style.color = '#7C3AED';
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const previewImg = document.getElementById('avatar_preview_img');
+      const previewLetter = document.getElementById('avatar_preview_letter');
+      if (previewImg) {
+        previewImg.src = e.target.result;
+        previewImg.style.display = 'block';
+      }
+      if (previewLetter) {
+        previewLetter.style.display = 'none';
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+}
+</script>
+{% endblock %}
