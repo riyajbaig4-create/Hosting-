@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Console — {{ vip_site_name }}{% endblock %}
+
+{% block content %}
+<div class="container-mobile">
+
+  <!-- Admin Header Banner -->
+  <div class="vip-card" style="padding: 24px; background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%); color: #FFFFFF; border: none; box-shadow: 0 10px 25px rgba(30, 27, 75, 0.2);">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px;">
+      
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <div style="width: 52px; height: 52px; border-radius: 16px; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 1.6rem;">
+          👑
+        </div>
+        <div>
+          <span style="font-size: 0.75rem; font-weight: 800; color: #A5B4FC; text-transform: uppercase; letter-spacing: 0.05em;">Root Administration</span>
+          <h1 style="font-size: 1.45rem; font-weight: 900; color: #FFFFFF; line-height: 1.2;">{{ site_name }} Control Center</h1>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <a href="{{ url_for('admin_users') }}" class="btn-secondary btn-sm" style="background: rgba(255,255,255,0.1); color:#fff; border-color: rgba(255,255,255,0.2);">
+          👥 Users
+        </a>
+        <a href="{{ url_for('admin_coins') }}" class="btn-secondary btn-sm" style="background: rgba(255,255,255,0.1); color:#fff; border-color: rgba(255,255,255,0.2);">
+          🪙 Coins
+        </a>
+        <a href="{{ url_for('admin_settings') }}" class="btn-primary btn-sm" style="background: var(--primary-purple); color:#fff;">
+          ⚙️ Settings
+        </a>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Admin Metric Cards Grid -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px;">
+    
+    <div class="vip-card" style="padding: 16px; margin-bottom: 0;">
+      <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Total Users</div>
+      <div style="font-size: 1.6rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{{ total_users }}</div>
+      <div style="font-size: 0.725rem; color: #10B981; margin-top: 2px;">{{ active_users }} Active • {{ disabled_users }} Disabled</div>
+    </div>
+
+    <div class="vip-card" style="padding: 16px; margin-bottom: 0;">
+      <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Total Servers</div>
+      <div style="font-size: 1.6rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{{ total_servers }}</div>
+      <div style="font-size: 0.725rem; color: #3B82F6; margin-top: 2px;">{{ running_servers }} Active Running</div>
+    </div>
+
+    <div class="vip-card" style="padding: 16px; margin-bottom: 0;">
+      <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Total Files</div>
+      <div style="font-size: 1.6rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{{ total_files }}</div>
+      <div style="font-size: 0.725rem; color: #6366F1; margin-top: 2px;">{{ total_storage_formatted }} on disk</div>
+    </div>
+
+    <div class="vip-card" style="padding: 16px; margin-bottom: 0;">
+      <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase;">System Coins</div>
+      <div style="font-size: 1.6rem; font-weight: 800; color: #D97706; margin-top: 4px;">🪙 {{ total_system_coins }}</div>
+      <div style="font-size: 0.725rem; color: #B45309; margin-top: 2px;">Total Circulating</div>
+    </div>
+
+  </div>
+
+  <!-- Admin Sub Navigation Quick Links -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px;">
+    
+    {% if is_super_admin or has_admin_permission(current_user, 'manage_users') %}
+    <a href="{{ url_for('admin_users') }}" class="vip-card vip-card-interactive" style="padding: 16px; margin-bottom: 0; display: flex; align-items: center; gap: 12px;">
+      <span style="font-size: 1.5rem;">👥</span>
+      <div>
+        <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem;">User Management</div>
+        <div style="font-size: 0.75rem; color: #64748B;">Roles, balances &amp; permissions</div>
+      </div>
+    </a>
+    {% endif %}
+
+    {% if is_super_admin or has_admin_permission(current_user, 'manage_coins') %}
+    <a href="{{ url_for('admin_coins') }}" class="vip-card vip-card-interactive" style="padding: 16px; margin-bottom: 0; display: flex; align-items: center; gap: 12px;">
+      <span style="font-size: 1.5rem;">🪙</span>
+      <div>
+        <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem;">Coins Management</div>
+        <div style="font-size: 0.75rem; color: #64748B;">Grant or deduct user coin balances</div>
+      </div>
+    </a>
+    {% endif %}
+
+    {% if is_super_admin or has_admin_permission(current_user, 'manage_broadcasts') %}
+    <a href="{{ url_for('admin_broadcast') }}" class="vip-card vip-card-interactive" style="padding: 16px; margin-bottom: 0; display: flex; align-items: center; gap: 12px; border: 1.5px solid #C7D2FE; background: #EEF2FF;">
+      <span style="font-size: 1.5rem;">⚡</span>
+      <div>
+        <div style="font-weight: 700; color: #3730A3; font-size: 0.95rem;">Broadcast Sender</div>
+        <div style="font-size: 0.75rem; color: #4338CA;">Push in-app alerts to users</div>
+      </div>
+    </a>
+    {% endif %}
+
+    {% if is_super_admin or has_admin_permission(current_user, 'manage_files') %}
+    <a href="{{ url_for('admin_files') }}" class="vip-card vip-card-interactive" style="padding: 16px; margin-bottom: 0; display: flex; align-items: center; gap: 12px;">
+      <span style="font-size: 1.5rem;">📁</span>
+      <div>
+        <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem;">Server Storage</div>
+        <div style="font-size: 0.75rem; color: #64748B;">Inspect hosted files across accounts</div>
+      </div>
+    </a>
+    {% endif %}
+
+    {% if is_super_admin or has_admin_permission(current_user, 'manage_announcements') %}
+    <a href="{{ url_for('admin_announcements') }}" class="vip-card vip-card-interactive" style="padding: 16px; margin-bottom: 0; display: flex; align-items: center; gap: 12px; border: 1.5px solid #DDD6FE; background: #FAF5FF;">
+      <span style="font-size: 1.5rem;">📢</span>
+      <div>
+        <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem;">System Notices</div>
+        <div style="font-size: 0.75rem; color: #64748B;">Broadcast dashboard announcements</div>
+      </div>
+    </a>
+    {% endif %}
+
+    {% if is_super_admin or has_admin_permission(current_user, 'manage_settings') %}
+    <a href="{{ url_for('admin_settings') }}" class="vip-card vip-card-interactive" style="padding: 16px; margin-bottom: 0; display: flex; align-items: center; gap: 12px;">
+      <span style="font-size: 1.5rem;">⚙️</span>
+      <div>
+        <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem;">System Settings</div>
+        <div style="font-size: 0.75rem; color: #64748B;">Signup bonus &amp; package pricing</div>
+      </div>
+    </a>
+    {% endif %}
+
+  </div>
+
+  <!-- Recent User Registrations & Audit Logs -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+    
+    <!-- Recent Users -->
+    <div class="vip-card" style="padding: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <h3 style="font-size: 1.05rem; font-weight: 800; color: #0F172A;">Recent Users</h3>
+        <a href="{{ url_for('admin_users') }}" style="font-size: 0.775rem; color: var(--primary-purple); font-weight: 600;">All Users →</a>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        {% for u in recent_users %}
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: #F8FAFC; border-radius: 10px; font-size: 0.85rem;">
+          <div>
+            <div style="font-weight: 700; color: #0F172A;">{{ u.full_name }} <span style="font-weight:normal; color:#64748B;">(@{{ u.username }})</span></div>
+            <div style="font-size: 0.75rem; color: #94A3B8;">{{ u.email }}</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-weight: 700; color: #D97706;">🪙 {{ u.coins }}</div>
+            <span style="font-size: 0.7rem; color: {% if u.status == 'active' %}#10B981{% else %}#EF4444{% endif %}; font-weight: 600;">{{ u.status|upper }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Recent Audit Logs -->
+    <div class="vip-card" style="padding: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <h3 style="font-size: 1.05rem; font-weight: 800; color: #0F172A;">Audit Event Logs</h3>
+        <span style="font-size: 0.75rem; color: #94A3B8;">Real-time</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        {% for log in recent_logs %}
+        <div style="padding: 10px; background: #F8FAFC; border-radius: 10px; font-size: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; color: #64748B; font-size: 0.725rem; margin-bottom: 2px;">
+            <strong style="color: #7C3AED;">{{ log.action }}</strong>
+            <span>{{ log.created_at }}</span>
+          </div>
+          <div style="color: #334155;">{{ log.details }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}

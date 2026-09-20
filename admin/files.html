@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}Central File Management — {{ vip_site_name }}{% endblock %}
+
+{% block content %}
+<div class="container-mobile">
+
+  <!-- Admin Header Banner -->
+  <div class="vip-card" style="padding: 24px; margin-bottom: 16px; background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%); color: #FFFFFF; border: none; box-shadow: 0 10px 25px rgba(30, 27, 75, 0.2);">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px;">
+      <div>
+        <a href="{{ url_for('admin_dashboard') }}" style="color: #A5B4FC; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; text-decoration: none;">
+          ← Back to Admin Console
+        </a>
+        <h1 style="font-size: 1.45rem; font-weight: 900; color: #FFFFFF; line-height: 1.2; margin-top: 6px;">
+          📁 Central Server File Management &amp; Downloads
+        </h1>
+        <p style="font-size: 0.825rem; color: #C7D2FE; margin: 4px 0 0 0;">
+          Inspect, review, preview, and directly download all uploaded Python scripts and server projects across all user accounts.
+        </p>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 12px; text-align: right;">
+          <div style="font-size: 0.725rem; color: #C7D2FE; text-transform: uppercase; font-weight: 700;">Global Storage</div>
+          <div style="font-size: 1.15rem; font-weight: 900; color: #FFFFFF;">{{ total_storage_formatted }} <span style="font-size: 0.8rem; font-weight: 500; color: #A5B4FC;">({{ total_files }} files)</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search and Filter Bar -->
+  <div class="vip-card" style="padding: 16px; margin-bottom: 16px;">
+    <form method="GET" action="{{ url_for('admin_files') }}" style="display: flex; gap: 10px; flex-wrap: wrap; margin: 0;">
+      <div style="flex: 1; min-width: 240px; position: relative;">
+        <input 
+          type="text" 
+          name="q" 
+          value="{{ query or '' }}" 
+          class="form-control" 
+          placeholder="Search by server name, owner username, or email..."
+          style="padding-left: 38px;"
+        >
+        <span style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 0.95rem; color: #94A3B8;">🔍</span>
+      </div>
+      <button type="submit" class="btn-primary" style="padding: 9px 20px;">
+        Search Files
+      </button>
+      {% if query %}
+      <a href="{{ url_for('admin_files') }}" class="btn-secondary" style="padding: 9px 16px; text-decoration: none;">
+        Clear
+      </a>
+      {% endif %}
+    </form>
+  </div>
+
+  <!-- Server Files List -->
+  <div style="display: flex; flex-direction: column; gap: 16px;">
+    {% if stats %}
+      {% for s_item in stats %}
+      {% set s = s_item.server %}
+      <div class="vip-card" style="padding: 20px; border: 1px solid #E2E8F0; transition: box-shadow 0.2s ease;">
+        
+        <!-- Header Info Row -->
+        <div style="display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 14px; border-bottom: 1px solid #F1F5F9;">
+          
+          <div style="display: flex; align-items: flex-start; gap: 14px;">
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #EEF2FF; color: #4F46E5; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0;">
+              🐍
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <h3 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0;">
+                  {{ s.name }}
+                </h3>
+                <span style="font-size: 0.725rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: {% if s.status == 'running' %}#DCFCE7; color: #15803D;{% elif s.status == 'stopped' %}#F1F5F9; color: #64748B;{% else %}#FEF2F2; color: #DC2626;{% endif %}">
+                  ● {{ s.status|upper }}
+                </span>
+                <span style="font-size: 0.75rem; color: #64748B; font-weight: 600;">
+                  Server #{{ s.id }} (Port {{ s.port }})
+                </span>
+              </div>
+              
+              <div style="font-size: 0.8rem; color: #64748B; margin-top: 4px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <span>👤 Owner: <strong>{{ s.full_name or s.username }}</strong> (<code style="font-size: 0.775rem;">{{ s.email }}</code>)</span>
+                <span>•</span>
+                <span>📅 Created: {{ s.created_at }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions: Direct ZIP Download + Open in User File Manager -->
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            
+            <div style="text-align: right; margin-right: 8px;">
+              <div style="font-size: 0.95rem; font-weight: 800; color: #4338CA;">{{ s_item.storage_mb }}</div>
+              <div style="font-size: 0.725rem; color: #64748B;">{{ s_item.file_count }} file{% if s_item.file_count != 1 %}s{% endif %}</div>
+            </div>
+
+            <!-- Direct Download Server Project ZIP -->
+            <a 
+              href="{{ url_for('admin_download_server_zip', server_id=s.id) }}" 
+              class="btn-primary" 
+              style="padding: 8px 16px; font-size: 0.825rem; display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); text-decoration: none;"
+              title="Download entire project files as ZIP archive"
+            >
+              <span>📦</span>
+              <span>Download Project ZIP</span>
+            </a>
+
+            <!-- Open Server Console -->
+            <a 
+              href="{{ url_for('server_manage', server_id=s.id) }}" 
+              class="btn-secondary" 
+              style="padding: 8px 14px; font-size: 0.825rem; display: inline-flex; align-items: center; gap: 4px; text-decoration: none;"
+            >
+              <span>🖥️</span>
+              <span>Console</span>
+            </a>
+
+          </div>
+
+        </div>
+
+        <!-- Files Breakdown Table -->
+        <div style="margin-top: 14px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <div style="font-size: 0.825rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.03em;">
+              Directory Contents &amp; Scripts ({{ s_item.files|length }})
+            </div>
+            {% if s_item.files|length > 0 %}
+            <span style="font-size: 0.75rem; color: #94A3B8;">Click preview to inspect script code instantly</span>
+            {% endif %}
+          </div>
+
+          {% if s_item.files %}
+          <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; overflow: hidden;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.825rem;">
+              <thead>
+                <tr style="background: #F1F5F9; color: #475569; font-weight: 700; border-bottom: 1px solid #E2E8F0;">
+                  <th style="padding: 10px 14px;">File / Path</th>
+                  <th style="padding: 10px 14px; width: 110px;">Size</th>
+                  <th style="padding: 10px 14px; width: 140px;">Last Modified</th>
+                  <th style="padding: 10px 14px; text-align: right; width: 170px;">Admin Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for f in s_item.files %}
+                <tr style="border-bottom: 1px solid #E2E8F0;">
+                  <td style="padding: 10px 14px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span style="font-size: 1rem;">
+                        {% if f.filename == 'main.py' %}🐍
+                        {% elif f.ext == 'py' %}📜
+                        {% elif 'req' in f.filename %}📦
+                        {% elif f.ext in ['json', 'yaml', 'yml', 'env'] %}⚙️
+                        {% elif f.ext in ['txt', 'md', 'log'] %}📄
+                        {% else %}📁{% endif %}
+                      </span>
+                      <strong style="color: #0F172A; font-family: monospace; font-size: 0.85rem;">{{ f.name }}</strong>
+                    </div>
+                  </td>
+                  <td style="padding: 10px 14px; color: #64748B; font-family: monospace;">
+                    {{ f.size_formatted }}
+                  </td>
+                  <td style="padding: 10px 14px; color: #94A3B8; font-size: 0.775rem;">
+                    {{ f.modified }}
+                  </td>
+                  <td style="padding: 10px 14px; text-align: right;">
+                    <div style="display: inline-flex; align-items: center; gap: 6px;">
+                      
+                      <!-- Quick Preview Button if text file -->
+                      {% if f.is_text and f.size <= 524288 %}
+                      <button 
+                        type="button" 
+                        onclick="previewAdminFile({{ s.id }}, '{{ f.name|e }}', '{{ s.name|e }}')" 
+                        class="btn-secondary btn-sm" 
+                        style="padding: 4px 8px; font-size: 0.75rem; background: #FFFFFF;"
+                        title="Quick Code Preview"
+                      >
+                        👁️ Preview
+                      </button>
+                      {% endif %}
+
+                      <!-- Direct Single File Download Button -->
+                      <a 
+                        href="{{ url_for('admin_download_server_file', server_id=s.id, path=f.name) }}" 
+                        class="btn-secondary btn-sm" 
+                        style="padding: 4px 10px; font-size: 0.75rem; background: #FFFFFF; color: #4338CA; border-color: #C7D2FE; font-weight: 700; text-decoration: none;"
+                        title="Download file directly to computer"
+                      >
+                        ⬇️ Download
+                      </a>
+
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div style="padding: 16px; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 10px; text-align: center; color: #64748B; font-size: 0.85rem;">
+            No files currently stored in this server directory.
+          </div>
+          {% endif %}
+        </div>
+
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="vip-card" style="padding: 40px 20px; text-align: center; color: #64748B;">
+        <div style="font-size: 2.5rem; margin-bottom: 8px;">📂</div>
+        <div style="font-weight: 700; color: #0F172A; font-size: 1.1rem;">No Server Files Found</div>
+        <p style="font-size: 0.85rem; max-width: 420px; margin: 6px auto 0;">
+          {% if query %}
+          No servers or files matched your search query "<strong>{{ query }}</strong>".
+          {% else %}
+          There are no user servers created yet on the platform.
+          {% endif %}
+        </p>
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Admin File Preview Modal -->
+<div id="adminFilePreviewModal" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 16px;">
+  <div style="background: #0F172A; color: #F8FAFC; border: 1px solid #334155; border-radius: 16px; width: 100%; max-width: 860px; max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); overflow: hidden;">
+    
+    <!-- Modal Header -->
+    <div style="padding: 16px 20px; background: #1E293B; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+      <div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.1rem;">📜</span>
+          <span id="previewModalFilename" style="font-weight: 800; font-family: monospace; font-size: 1rem; color: #38BDF8;"></span>
+        </div>
+        <div id="previewModalSubtitle" style="font-size: 0.75rem; color: #94A3B8; margin-top: 2px;"></div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <a id="previewModalDownloadBtn" href="#" class="btn-primary btn-sm" style="background: #38BDF8; color: #0F172A; font-weight: 800; font-size: 0.775rem; text-decoration: none;">
+          ⬇️ Direct Download
+        </a>
+        <button type="button" onclick="closeAdminPreviewModal()" style="background: transparent; border: none; color: #94A3B8; font-size: 1.4rem; cursor: pointer; padding: 4px 8px; line-height: 1;">
+          ✕
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal Body Code Area -->
+    <div style="padding: 16px; overflow-y: auto; flex: 1; background: #090D16;">
+      <pre id="previewModalContent" style="margin: 0; font-family: 'JetBrains Mono', Consolas, Monaco, monospace; font-size: 0.85rem; line-height: 1.5; color: #E2E8F0; white-space: pre-wrap; word-break: break-all;"></pre>
+    </div>
+
+    <!-- Modal Footer -->
+    <div style="padding: 10px 20px; background: #1E293B; border-top: 1px solid #334155; display: flex; justify-content: flex-end;">
+      <button type="button" onclick="closeAdminPreviewModal()" class="btn-secondary btn-sm" style="background: #334155; color: #F8FAFC; border: none; font-size: 0.8rem; padding: 6px 16px;">
+        Close Preview
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function previewAdminFile(serverId, filePath, serverName) {
+  const modal = document.getElementById('adminFilePreviewModal');
+  const filenameEl = document.getElementById('previewModalFilename');
+  const subtitleEl = document.getElementById('previewModalSubtitle');
+  const contentEl = document.getElementById('previewModalContent');
+  const downloadBtn = document.getElementById('previewModalDownloadBtn');
+
+  filenameEl.innerText = filePath;
+  subtitleEl.innerText = 'Server: ' + serverName + ' (ID #' + serverId + ') • Loading content...';
+  contentEl.innerText = 'Loading script contents securely from server storage...';
+  downloadBtn.href = '/admin/servers/' + serverId + '/files/download?path=' + encodeURIComponent(filePath);
+
+  modal.style.display = 'flex';
+
+  fetch('/admin/api/servers/' + serverId + '/files/read?path=' + encodeURIComponent(filePath))
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        contentEl.innerText = data.content;
+        subtitleEl.innerText = 'Server: ' + serverName + ' (ID #' + serverId + ') • ' + (data.size < 1024 ? data.size + ' B' : (data.size / 1024).toFixed(1) + ' KB');
+      } else {
+        contentEl.innerText = 'Error loading preview: ' + (data.message || 'File could not be opened.');
+      }
+    })
+    .catch(err => {
+      contentEl.innerText = 'Failed to load file preview. Please use direct download.';
+    });
+}
+
+function closeAdminPreviewModal() {
+  document.getElementById('adminFilePreviewModal').style.display = 'none';
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeAdminPreviewModal();
+  }
+});
+</script>
+{% endblock %}
