@@ -1,0 +1,437 @@
+{% extends "base.html" %}
+
+{% block title %}File Manager: {{ server.name }} — {{ vip_site_name }}{% endblock %}
+
+{% block content %}
+<div class="container-mobile">
+
+  <!-- Back Navigation Button -->
+  <div style="margin-top: 2px; margin-bottom: 8px;">
+    <a href="{{ url_for('dashboard') }}" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; border-radius: 10px; padding: 6px 13px; font-size: 0.825rem; color: #334155; text-decoration: none; background: #FFFFFF; border: 1px solid #E2E8F0; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05); transition: all 0.15s ease;" onmouseover="this.style.borderColor='#C4B5FD'; this.style.color='#7C3AED';" onmouseout="this.style.borderColor='#E2E8F0'; this.style.color='#334155';">
+      ← Back
+    </a>
+  </div>
+
+  <!-- Header Banner -->
+  <div class="vip-card" style="padding: 18px 24px; margin-bottom: 16px; background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%);">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+      <div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 0.8rem; font-weight: 800; color: #7C3AED; text-transform: uppercase; letter-spacing: 0.05em;">HOSTING PLATFORM</span>
+          <span style="color: #CBD5E1;">•</span>
+          <span style="font-size: 0.8rem; color: #64748B; font-weight: 700;">Server ID: #{{ server.id }}</span>
+        </div>
+        <h1 style="font-size: 1.4rem; font-weight: 900; color: #0F172A; margin: 2px 0;">
+          Server: <span style="background: var(--primary-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">{{ server.name }}</span>
+        </h1>
+      </div>
+      <span id="server-status-badge" class="status-badge status-{{ server.status }}" style="font-weight: 800; border-radius: 8px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px;">
+        {% if server.status == 'running' %}
+          🟢 RUNNING
+        {% elif server.status == 'package_required' %}
+          🟡 PACKAGE REQUIRED
+        {% else %}
+          🔴 STOPPED
+        {% endif %}
+      </span>
+    </div>
+  </div>
+
+  <!-- Sub Navigation Tabs -->
+  <div class="sub-nav-tabs">
+    <a href="{{ url_for('server_manage', server_id=server.id) }}" class="sub-nav-tab">
+      📊 Logs
+    </a>
+    <a href="{{ url_for('file_manager', server_id=server.id) }}" class="sub-nav-tab active">
+      📁 Files
+    </a>
+    <a href="{{ url_for('server_startup', server_id=server.id) }}" class="sub-nav-tab">
+      ⚙️ Startup
+    </a>
+  </div>
+
+  <!-- File Manager Toolbar -->
+  <div class="vip-card" style="padding: 16px 20px; margin-bottom: 16px;">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;">
+      
+      <!-- Breadcrumb Path -->
+      <div style="display: flex; align-items: center; gap: 6px; font-size: 0.875rem; font-weight: 600; color: var(--text-secondary); overflow-x: auto; max-width: 100%;">
+        <a href="{{ url_for('file_manager', server_id=server.id) }}" style="color: var(--primary-purple); display:flex; align-items:center; gap:4px;">
+          🏠 root
+        </a>
+        {% for bc in breadcrumbs %}
+        <span style="color: #CBD5E1;">/</span>
+        <a href="{{ url_for('file_manager', server_id=server.id, path=bc.path) }}" style="color: var(--primary-purple);">
+          {{ bc.name }}
+        </a>
+        {% endfor %}
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+        
+        <!-- Upload ZIP File -->
+        <label class="btn-primary btn-sm" style="cursor: pointer; background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);">
+          📦 Upload ZIP
+          <input type="file" id="zip-upload-input" accept=".zip" style="display: none;" onchange="handleZipUpload({{ server.id }})">
+        </label>
+
+        <!-- Upload Any File -->
+        <label class="btn-secondary btn-sm" style="cursor: pointer;">
+          📤 Upload File
+          <input type="file" id="regular-upload-input" multiple style="display: none;" onchange="handleRegularUpload({{ server.id }})">
+        </label>
+
+        <!-- New Folder -->
+        <button onclick="promptCreateFolder({{ server.id }})" class="btn-secondary btn-sm">
+          📁 New Folder
+        </button>
+
+        <!-- New File -->
+        <button onclick="promptCreateFile({{ server.id }})" class="btn-secondary btn-sm">
+          ➕ New File
+        </button>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- File List Card -->
+  <div class="vip-card" style="padding: 0; overflow: visible; position: relative;">
+    
+    <!-- Table Header -->
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #F8FAFC; border-bottom: 1px solid var(--border-light); font-size: 0.775rem; font-weight: 700; color: #64748B; text-transform: uppercase; border-top-left-radius: calc(var(--radius-lg) - 1px); border-top-right-radius: calc(var(--radius-lg) - 1px);">
+      <div>Name</div>
+      <div style="display: flex; gap: 24px; align-items: center;">
+        <span style="display: none; @media(min-width: 640px){ display: inline; }">Size</span>
+        <span>Action</span>
+      </div>
+    </div>
+
+    <!-- Items List -->
+    {% if items %}
+      {% for item in items %}
+      <div class="file-list-item">
+        
+        <!-- Left: Icon & Name -->
+        <div class="file-info-group">
+          <div class="file-icon">
+            {% if item.is_dir %}📁
+            {% elif item.is_zip %}📦
+            {% elif item.is_py %}🐍
+            {% elif item.name.endswith('.json') %}⚙️
+            {% elif item.name.endswith('.log') %}📋
+            {% elif item.name.endswith('.txt') or item.name.endswith('.md') %}📝
+            {% elif item.name.endswith('.png') or item.name.endswith('.jpg') or item.name.endswith('.jpeg') or item.name.endswith('.svg') or item.name.endswith('.gif') %}🖼️
+            {% elif item.name.endswith('.js') or item.name.endswith('.ts') %}⚡
+            {% elif item.name.endswith('.html') %}🌐
+            {% elif item.name.endswith('.css') %}🎨
+            {% else %}📄{% endif %}
+          </div>
+          <div style="min-width: 0; flex: 1;">
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+              {% if item.is_dir %}
+              <a href="{{ url_for('file_manager', server_id=server.id, path=(current_path + '/' + item.name) if current_path else item.name) }}" style="font-weight: 700; color: #0F172A; font-size: 0.88rem; text-decoration: none; word-break: break-all;">
+                {{ item.name }}
+              </a>
+              {% else %}
+              <span onclick="openFileEditor({{ server.id }}, '{{ (current_path + '/' + item.name) if current_path else item.name }}')" style="font-weight: 600; color: #1E293B; font-size: 0.88rem; cursor: pointer; word-break: break-all;" title="Click to view/edit">
+                {{ item.name }}
+              </span>
+              {% endif %}
+
+              {% if item.is_entry %}
+              <span style="font-size: 0.625rem; background: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; padding: 1px 6px; border-radius: 4px; font-weight: 700; white-space: nowrap; flex-shrink: 0;">
+                ENTRY FILE
+              </span>
+              {% endif %}
+            </div>
+
+            <div style="font-size: 0.725rem; color: #94A3B8; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              {{ item.modified }} • {{ item.size }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: 3-Dot Action Menu -->
+        <div class="dropdown-menu-wrapper">
+          <button class="dropdown-trigger">⋮</button>
+          <div class="dropdown-popover">
+            {% set full_path = (current_path + '/' + item.name) if current_path else item.name %}
+
+            {% if item.is_zip %}
+            <button onclick="triggerUnzip({{ server.id }}, '{{ full_path }}')" class="dropdown-item" style="color: #6366F1; font-weight: 600;">
+              📦 Unzip / Extract
+            </button>
+            {% endif %}
+
+            {% if not item.is_dir %}
+            <button onclick="openFileEditor({{ server.id }}, '{{ full_path }}')" class="dropdown-item">
+              ✏️ Open &amp; Edit
+            </button>
+            <a href="{{ url_for('download_file', server_id=server.id, path=full_path) }}" class="dropdown-item">
+              ⬇️ Download
+            </a>
+            {% endif %}
+
+            <button onclick="renameServerItem({{ server.id }}, '{{ full_path }}')" class="dropdown-item">
+              🏷️ Rename
+            </button>
+
+            <button onclick="deleteServerItem({{ server.id }}, '{{ full_path }}')" class="dropdown-item text-danger">
+              🗑️ Delete
+            </button>
+          </div>
+        </div>
+
+      </div>
+      {% endfor %}
+    {% else %}
+      <div style="text-align: center; padding: 36px 16px; color: #94A3B8; font-size: 0.9rem;">
+        This folder is currently empty. Upload files or a ZIP archive to get started.
+      </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Upload Progress Modal -->
+  <div id="upload-progress-modal" class="maintenance-overlay" style="display: none; z-index: 100000; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(4px);">
+    <div class="maintenance-card" style="text-align: center; max-width: 440px; width: 90%; padding: 26px 22px; border-radius: var(--radius-lg); box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
+      
+      <!-- Modal Icon -->
+      <div style="width: 58px; height: 58px; border-radius: 50%; background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%); color: #6366F1; display: flex; align-items: center; justify-content: center; font-size: 1.7rem; margin: 0 auto 14px auto; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.2);">
+        <span id="upload-modal-icon">📤</span>
+      </div>
+
+      <h3 id="upload-modal-title" style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin-bottom: 4px;">
+        Uploading Files...
+      </h3>
+      <p id="upload-status-subtext" style="font-size: 0.8rem; color: #64748B; margin-bottom: 18px; line-height: 1.4;">
+        Please wait while your files are being uploaded to the server.
+      </p>
+
+      <!-- Progress Track & Bar -->
+      <div style="background: #F1F5F9; border-radius: 999px; height: 14px; width: 100%; overflow: hidden; position: relative; margin-bottom: 12px; border: 1px solid #E2E8F0;">
+        <div id="upload-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #6366F1 0%, #8B5CF6 100%); border-radius: 999px; transition: width 0.15s ease;"></div>
+      </div>
+
+      <!-- Stats row -->
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; font-weight: 700; color: #475569;">
+        <span id="upload-percent-text" style="color: #6366F1;">0%</span>
+        <span id="upload-size-text">0 KB / 0 KB</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- In-Browser Code Editor Modal -->
+  <div id="file-editor-modal" class="maintenance-overlay" style="display: none;">
+    <div class="maintenance-card" style="text-align: left; max-width: 760px; height: 85vh; display: flex; flex-direction: column; padding: 20px;">
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.25rem;">📝</span>
+          <h3 id="editor-filename" style="font-size: 1.1rem; font-weight: 800; color: #0F172A;">File Editor</h3>
+        </div>
+        <button onclick="document.getElementById('file-editor-modal').style.display='none'" style="background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #94A3B8;">&times;</button>
+      </div>
+
+      <input type="hidden" id="editor-path">
+
+      <textarea 
+        id="editor-content" 
+        style="flex: 1; width: 100%; font-family: var(--font-mono); font-size: 0.85rem; padding: 14px; border: 1px solid var(--border-light); border-radius: var(--radius-md); background: #0B1120; color: #F1F5F9; resize: none; line-height: 1.5; outline: none; tab-size: 4;" 
+        spellcheck="false"
+      ></textarea>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px;">
+        <button onclick="document.getElementById('file-editor-modal').style.display='none'" class="btn-secondary btn-sm">
+          Cancel
+        </button>
+        <button id="editor-save-btn" onclick="saveFileEditor({{ server.id }})" class="btn-primary btn-sm">
+          💾 Save Changes
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Locked Expired Server Modal Overlay -->
+  {% include 'expired_modal.html' %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Helper for size formatting
+  function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  function showUploadModal(title, icon) {
+    const modal = document.getElementById('upload-progress-modal');
+    document.getElementById('upload-modal-title').textContent = title || 'Uploading Files...';
+    document.getElementById('upload-modal-icon').textContent = icon || '📤';
+    document.getElementById('upload-status-subtext').textContent = 'Uploading files to server...';
+    document.getElementById('upload-progress-bar').style.width = '0%';
+    document.getElementById('upload-percent-text').textContent = '0%';
+    document.getElementById('upload-size-text').textContent = '0 KB / 0 KB';
+    modal.style.display = 'flex';
+  }
+
+  function updateUploadProgress(percent, sizeText, statusText) {
+    const bar = document.getElementById('upload-progress-bar');
+    const pctText = document.getElementById('upload-percent-text');
+    const szText = document.getElementById('upload-size-text');
+    const subText = document.getElementById('upload-status-subtext');
+
+    if (bar) bar.style.width = Math.min(percent, 100) + '%';
+    if (pctText) pctText.textContent = Math.min(percent, 100) + '%';
+    if (szText && sizeText) szText.textContent = sizeText;
+    if (subText && statusText) subText.textContent = statusText;
+  }
+
+  function closeUploadModal() {
+    const modal = document.getElementById('upload-progress-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function uploadFilesWithProgress(serverId, files, isZip = false) {
+    if (!files || files.length === 0) return;
+
+    const fd = new FormData();
+    fd.append('path', '{{ current_path }}');
+    for (let i = 0; i < files.length; i++) {
+      fd.append('files', files[i]);
+    }
+
+    const title = isZip ? 'Uploading & Auto-Extracting ZIP...' : 'Uploading File(s)...';
+    const icon = isZip ? '📦' : '📤';
+    showUploadModal(title, icon);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/servers/${serverId}/files/upload`, true);
+
+    xhr.upload.onprogress = function(e) {
+      if (e.lengthComputable) {
+        const percent = Math.round((e.loaded / e.total) * 100);
+        const loadedStr = formatBytes(e.loaded);
+        const totalStr = formatBytes(e.total);
+        
+        let statusMsg = 'Uploading files to server...';
+        if (percent >= 100) {
+          statusMsg = isZip ? 'Auto-extracting ZIP contents on server...' : 'Finishing & scanning files...';
+        }
+        
+        updateUploadProgress(percent, `${loadedStr} / ${totalStr}`, statusMsg);
+      }
+    };
+
+    xhr.onload = function() {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (data.success) {
+            updateUploadProgress(100, 'Done!', data.message || 'Upload complete!');
+            showToast(data.message, 'success');
+            setTimeout(() => {
+              closeUploadModal();
+              location.reload();
+            }, 650);
+          } else {
+            closeUploadModal();
+            showToast(data.message || 'Upload failed', 'danger');
+          }
+        } catch (err) {
+          closeUploadModal();
+          showToast('Invalid server response.', 'danger');
+        }
+      } else {
+        closeUploadModal();
+        showToast('Upload failed (Error ' + xhr.status + ')', 'danger');
+      }
+    };
+
+    xhr.onerror = function() {
+      closeUploadModal();
+      showToast('Network error during file upload.', 'danger');
+    };
+
+    xhr.send(fd);
+  }
+
+  // Prompt Create Folder
+  async function promptCreateFolder(serverId) {
+    const folderName = prompt('Enter new folder name:');
+    if (!folderName) return;
+
+    const fd = new FormData();
+    fd.append('path', '{{ current_path }}');
+    fd.append('folder_name', folderName);
+
+    try {
+      const res = await fetch(`/api/servers/${serverId}/files/create-folder`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message, 'success');
+        setTimeout(() => location.reload(), 600);
+      } else {
+        showToast(data.message, 'danger');
+      }
+    } catch (err) {
+      showToast('Error creating folder.', 'danger');
+    }
+  }
+
+  // Prompt Create File
+  async function promptCreateFile(serverId) {
+    const fileName = prompt('Enter new file name (e.g. config.py):');
+    if (!fileName) return;
+
+    const fd = new FormData();
+    fd.append('path', '{{ current_path }}');
+    fd.append('file_name', fileName);
+
+    try {
+      const res = await fetch(`/api/servers/${serverId}/files/create-file`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message, 'success');
+        setTimeout(() => location.reload(), 600);
+      } else {
+        showToast(data.message, 'danger');
+      }
+    } catch (err) {
+      showToast('Error creating file.', 'danger');
+    }
+  }
+
+  // Regular Upload
+  function handleRegularUpload(serverId) {
+    const input = document.getElementById('regular-upload-input');
+    if (!input || !input.files || input.files.length === 0) return;
+    
+    // Check if any file is a .zip file
+    let hasZip = false;
+    for (let i = 0; i < input.files.length; i++) {
+      if (input.files[i].name.toLowerCase().endsWith('.zip')) {
+        hasZip = true;
+        break;
+      }
+    }
+    uploadFilesWithProgress(serverId, input.files, hasZip);
+  }
+
+  // ZIP Upload
+  function handleZipUpload(serverId) {
+    const input = document.getElementById('zip-upload-input');
+    if (!input || !input.files || input.files.length === 0) return;
+    uploadFilesWithProgress(serverId, input.files, true);
+  }
+</script>
+{% endblock %}

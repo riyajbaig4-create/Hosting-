@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{{ vip_site_name }} — Python Hosting Platform{% endblock %}</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  
+  <link rel="icon" href="{{ site_logo_url }}">
+</head>
+<body class="{% if request.endpoint in ['server_manage', 'file_manager', 'server_startup'] %}no-bottom-nav{% endif %}">
+
+  <!-- Centered Smooth Page Refresh Loading Screen -->
+  <div id="hostx-page-loader" class="hostx-loader-screen">
+    <div class="hostx-loader-box">
+      <div class="hostx-loader-spinner"></div>
+      <div class="hostx-loader-title">{{ site_name }}<span class="hostx-loader-dots"></span></div>
+    </div>
+  </div>
+  <script>
+    (function() {
+      function hideLoader() {
+        var loader = document.getElementById('hostx-page-loader');
+        if (loader && !loader.classList.contains('loader-hidden')) {
+          loader.classList.add('loader-hidden');
+        }
+      }
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        setTimeout(hideLoader, 200);
+      } else {
+        document.addEventListener('DOMContentLoaded', function() { setTimeout(hideLoader, 200); });
+      }
+      window.addEventListener('load', function() { setTimeout(hideLoader, 100); });
+    })();
+  </script>
+
+  <!-- Impersonation Warning Banner -->
+  {% if is_impersonating %}
+  <div class="impersonation-banner">
+    <span>🛡️ <strong>Authorized Support Mode:</strong> Currently managing account as <strong>{{ current_user.username }}</strong>.</span>
+    <a href="{{ url_for('stop_impersonating') }}" class="btn-secondary btn-sm" style="background:#fff; border-color:#d97706; color:#92400e; font-weight:700;">
+      Return to Admin Panel ✕
+    </a>
+  </div>
+  {% endif %}
+
+  <!-- Maintenance Mode Banner / Modal -->
+  {% if maintenance_mode and maintenance_active %}
+  <div class="maintenance-overlay">
+    <div class="maintenance-card">
+      <div style="width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 50%; background: #FEF3C7; color: #D97706; display: flex; align-items: center; justify-content: center; font-size: 1.8rem;">
+        ⚙️
+      </div>
+      <h2 style="font-size: 1.4rem; font-weight: 800; color: #0F172A; margin-bottom: 12px;">New Update</h2>
+      <p style="color: #475569; font-size: 0.95rem; line-height: 1.6; margin-bottom: 24px;">
+        {{ maintenance_message or 'The website is currently undergoing maintenance. Please try again later.' }}
+      </p>
+      {% if current_user and current_user.role == 'admin' %}
+      <a href="{{ url_for('admin_dashboard') }}" class="btn-primary btn-block">Enter Admin Control Panel</a>
+      {% else %}
+      <div style="font-size: 0.85rem; color: #94A3B8;">{{ site_name }} Engineers are currently performing live system optimization.</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Main Top Header -->
+  <header class="header-nav">
+    <div class="container-mobile header-inner">
+      <!-- Brand Logo -->
+      <a href="{% if current_user %}{{ url_for('dashboard') }}{% else %}{{ url_for('home') }}{% endif %}" class="brand-logo">
+        <div class="brand-icon" style="overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 4px;">
+          <img src="{{ site_logo_url }}" alt="{{ site_name }}" width="28" height="28" style="max-width: 100%; max-height: 100%; object-fit: contain;" onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/logo.svg') }}';">
+        </div>
+        <span>{{ site_name }}</span>
+      </a>
+
+      <!-- Desktop Navigation Links -->
+      <nav class="desktop-nav-links">
+        {% if current_user %}
+        <a href="{{ url_for('dashboard') }}" class="desktop-link {% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
+        <a href="{{ url_for('packages') }}" class="desktop-link {% if request.endpoint == 'packages' %}active{% endif %}">Packages</a>
+        <a href="{{ url_for('coins') }}" class="desktop-link {% if request.endpoint == 'coins' %}active{% endif %}">My Coins</a>
+        <a href="{{ url_for('account') }}" class="desktop-link {% if request.endpoint == 'account' %}active{% endif %}">Account</a>
+        {% if is_admin or (current_user and (current_user.role in ['admin', 'super_admin'] or current_user.is_admin)) %}
+        <a href="{{ url_for('admin_dashboard') }}" class="desktop-link {% if request.endpoint and 'admin' in request.endpoint %}active{% endif %}" style="color: #7C3AED; font-weight:700;">Admin Panel</a>
+        {% endif %}
+        {% else %}
+        <a href="{{ url_for('home') }}" class="desktop-link">Home</a>
+        <a href="#features" class="desktop-link">Features</a>
+        <a href="#pricing" class="desktop-link">Pricing</a>
+        {% endif %}
+      </nav>
+
+      <!-- Header Actions -->
+      <div class="header-actions">
+        {% if current_user %}
+        <!-- Coin Counter Pill -->
+        <a href="{{ url_for('coins') }}" class="coin-pill" title="Your {{ site_name }} Coins balance">
+          <span class="coin-icon">🪙</span>
+          <span class="user-coin-val">{{ current_user.coins }}</span>
+        </a>
+
+        <!-- Notification Bell Dropdown (Centered between Coin Pill & Profile) -->
+        <div class="dropdown-menu-wrapper" id="notif-wrapper">
+          <button class="dropdown-trigger header-bell-trigger" id="notif-bell-btn" onclick="onNotificationBellClick(event)" title="Notifications">
+            <svg class="bell-icon-svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            <span id="notif-badge" class="notification-badge" style="display: none;"></span>
+          </button>
+          
+          <div class="dropdown-popover notification-popover" id="notif-popover">
+            <div class="notif-popover-header">
+              <div class="notif-popover-title">
+                <span>🔔</span>
+                <span>Notifications</span>
+              </div>
+              <button type="button" class="notif-clear-all-btn" onclick="clearAllNotifications(event)" id="notif-clear-all-btn">
+                Clear All
+              </button>
+            </div>
+            
+            <div class="notif-popover-body" id="notif-list-container">
+              <div style="text-align: center; color: #94A3B8; font-size: 0.85rem; padding: 20px;">
+                Loading notifications...
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- User Profile Trigger (Circular Avatar) -->
+        <div class="dropdown-menu-wrapper">
+          <button class="dropdown-trigger header-avatar-trigger" style="display:flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:50%; background:var(--primary-grad); color:#FFFFFF; font-weight:800; font-size:1.05rem; border:2px solid #EDE9FE; cursor:pointer; box-shadow:0 2px 8px rgba(124, 58, 237, 0.25); padding:0; overflow:hidden; transition: transform 0.15s ease, box-shadow 0.15s ease;" title="{{ current_user.full_name or current_user.username }}">
+            {% if current_user.avatar_url %}
+            <img src="{{ current_user.avatar_url }}" alt="{{ current_user.full_name }}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
+            {% else %}
+            <span>{{ current_user.full_name[0]|upper if current_user.full_name else (current_user.username[0]|upper if current_user.username else 'U') }}</span>
+            {% endif %}
+          </button>
+          <div class="dropdown-popover">
+            <div style="padding: 12px 14px; border-bottom: 1px solid var(--border-light); display: flex; align-items: center; gap: 10px;">
+              <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary-grad); color: #FFFFFF; font-weight: 800; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; border: 1.5px solid #EDE9FE;">
+                {% if current_user.avatar_url %}
+                <img src="{{ current_user.avatar_url }}" alt="{{ current_user.full_name }}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                {% else %}
+                <span>{{ current_user.full_name[0]|upper if current_user.full_name else (current_user.username[0]|upper if current_user.username else 'U') }}</span>
+                {% endif %}
+              </div>
+              <div style="overflow: hidden;">
+                <div style="font-size: 0.875rem; font-weight: 800; color: var(--text-main); white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">{{ current_user.full_name }}</div>
+                <div style="font-size: 0.75rem; color: #64748B; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">@{{ current_user.username }}</div>
+              </div>
+            </div>
+            <a href="{{ url_for('dashboard') }}" class="dropdown-item">📊 Dashboard</a>
+            <a href="{{ url_for('account') }}" class="dropdown-item">⚙️ Account Settings</a>
+            <a href="{{ url_for('coins') }}" class="dropdown-item">🪙 Coins & Rewards</a>
+            {% if is_admin or (current_user and (current_user.role in ['admin', 'super_admin'] or current_user.is_admin)) %}
+            <a href="{{ url_for('admin_dashboard') }}" class="dropdown-item" style="color: #7C3AED; font-weight:700;">👑 Admin Console</a>
+            {% endif %}
+            <div style="border-top: 1px solid var(--border-light);"></div>
+            <a href="{{ url_for('signout') }}" class="dropdown-item text-danger">🚪 Sign Out</a>
+          </div>
+        </div>
+        {% else %}
+          {% if request.endpoint in ['signin', 'signup'] %}
+          <a href="{{ url_for('home') }}" class="btn-secondary btn-sm" style="font-weight: 700; border-color: #CBD5E1; color: #475569;">Back to Home</a>
+          {% else %}
+          <a href="{{ url_for('signin') }}" class="btn-primary btn-sm">Sign In</a>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <!-- Flash Notifications -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="container-mobile" style="margin-top: 8px;">
+      {% for category, message in messages %}
+        <div class="vip-card" style="padding: 12px 18px; margin-bottom: 8px; border-left: 4px solid {% if category == 'success' %}#10B981{% elif category == 'danger' %}#EF4444{% elif category == 'warning' %}#F59E0B{% else %}#3B82F6{% endif %}; background: #FFFFFF; display:flex; align-items:center; justify-content:space-between;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span>
+              {% if category == 'success' %}✓{% elif category == 'danger' %}✕{% elif category == 'warning' %}⚠{% else %}ℹ️{% endif %}
+            </span>
+            <span style="font-size:0.9rem; font-weight:500;">{{ message }}</span>
+          </div>
+          <button onclick="this.parentElement.remove()" style="background:none; border:none; color:#94A3B8; font-size:1.1rem; cursor:pointer;">&times;</button>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- Main Content Body -->
+  <main style="flex: 1; padding: 6px 0 24px;">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Mobile Bottom Navigation -->
+  {% if current_user and request.endpoint not in ['server_manage', 'file_manager', 'server_startup'] %}
+  <nav class="mobile-bottom-nav">
+    {% if request.endpoint and 'admin' in request.endpoint %}
+      <!-- Admin Navigation -->
+      <a href="{{ url_for('admin_dashboard') }}" class="nav-tab-item {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
+        <span class="tab-icon">👑</span>
+        <span>Overview</span>
+      </a>
+      <a href="{{ url_for('admin_users') }}" class="nav-tab-item {% if request.endpoint == 'admin_users' %}active{% endif %}">
+        <span class="tab-icon">👥</span>
+        <span>Users</span>
+      </a>
+      <a href="{{ url_for('admin_coins') }}" class="nav-tab-item {% if request.endpoint == 'admin_coins' %}active{% endif %}">
+        <span class="tab-icon">🪙</span>
+        <span>Coins</span>
+      </a>
+      <a href="{{ url_for('admin_files') }}" class="nav-tab-item {% if request.endpoint == 'admin_files' %}active{% endif %}">
+        <span class="tab-icon">📁</span>
+        <span>Files</span>
+      </a>
+      <a href="{{ url_for('admin_settings') }}" class="nav-tab-item {% if request.endpoint == 'admin_settings' %}active{% endif %}">
+        <span class="tab-icon">⚙️</span>
+        <span>Settings</span>
+      </a>
+    {% else %}
+      <!-- User Main Navigation -->
+      <a href="{{ url_for('dashboard') }}" class="nav-tab-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+        <span class="tab-icon">⚡</span>
+        <span>Home</span>
+      </a>
+      <a href="{{ url_for('packages') }}" class="nav-tab-item {% if request.endpoint == 'packages' or request.endpoint == 'create_server' %}active{% endif %}">
+        <span class="tab-icon">🖥️</span>
+        <span>Servers</span>
+      </a>
+      <a href="{{ url_for('coins') }}" class="nav-tab-item {% if request.endpoint == 'coins' %}active{% endif %}">
+        <span class="tab-icon">🪙</span>
+        <span>Coins</span>
+      </a>
+      <a href="{{ url_for('account') }}" class="nav-tab-item {% if request.endpoint == 'account' %}active{% endif %}">
+        <span class="tab-icon">👤</span>
+        <span>Account</span>
+      </a>
+    {% endif %}
+  </nav>
+  {% endif %}
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

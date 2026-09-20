@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Server Packages — {{ vip_site_name }}{% endblock %}
+
+{% block content %}
+<div class="container-mobile">
+
+  <!-- Header -->
+  <div class="vip-card" style="text-align: center; padding: 28px 20px; background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%);">
+    <span class="badge-vip" style="margin-bottom: 8px;">HOSTING PLANS</span>
+    <h1 style="font-size: 1.6rem; font-weight: 800; color: #0F172A; margin: 6px 0;">Python Server Packages</h1>
+    <p style="font-size: 0.9rem; color: #64748B; max-width: 480px; margin: 0 auto 12px;">
+      Select the ideal hosting duration for your Python bots and backend services.
+    </p>
+    <div class="coin-pill" style="margin-top: 4px;">
+      <span>Your Coins:</span>
+      <strong class="user-coin-val">{{ user.coins }}</strong>
+    </div>
+  </div>
+
+  <!-- Packages Grid -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 20px;">
+    {% for pkg in packages %}
+    <div class="vip-card" style="display: flex; flex-direction: column; justify-content: space-between; position: relative; border-color: {% if pkg.is_first_time_offer %}#C4B5FD{% else %}#E2E8F0{% endif %};">
+      
+      {% if pkg.is_first_time_offer %}
+      <div style="position: absolute; top: -10px; right: 16px; background: var(--primary-grad); color: #fff; font-size: 0.675rem; font-weight: 800; text-transform: uppercase; padding: 3px 10px; border-radius: 9999px;">
+        ★ First Time Offer
+      </div>
+      {% endif %}
+
+      <div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <h3 style="font-size: 1.15rem; font-weight: 800; color: #0F172A;">{{ pkg.name }}</h3>
+          <span style="font-size: 1.25rem;">🐍</span>
+        </div>
+
+        <p style="font-size: 0.825rem; color: #64748B; margin-bottom: 16px;">{{ pkg.description }}</p>
+
+        <!-- Price block -->
+        <div style="background: #F8FAFC; border-radius: 12px; padding: 14px; margin-bottom: 16px; display: flex; align-items: baseline; gap: 6px;">
+          <span style="font-size: 1.8rem; font-weight: 800; color: #7C3AED;">{{ pkg.coins }}</span>
+          <span style="font-size: 0.95rem; font-weight: 700; color: #475569;">Coins</span>
+          <span style="color: #94A3B8; font-size: 0.85rem;">/ {{ pkg.days }} Days</span>
+        </div>
+
+        <ul style="list-style: none; padding: 0; font-size: 0.85rem; color: #475569; margin-bottom: 20px;">
+          <li style="margin-bottom: 6px;">✓ <strong>{{ pkg.days }} Days</strong> Uptime Guarantee</li>
+          <li style="margin-bottom: 6px;">✓ Auto-detect Python Entry Files</li>
+          <li style="margin-bottom: 6px;">✓ Live Log Streaming Terminal</li>
+          <li style="margin-bottom: 6px;">✓ Unlimited File Storage &amp; ZIP Support</li>
+          {% if pkg.is_first_time_offer %}
+          <li style="color: #7C3AED; font-weight: 700;">★ One-time per account only</li>
+          {% endif %}
+        </ul>
+      </div>
+
+      <div>
+        {% if pkg.is_first_time_offer and user.first_time_offer_used %}
+        <button class="btn-secondary btn-block" disabled style="opacity: 0.6; cursor: not-allowed;">
+          Offer Already Claimed
+        </button>
+        {% elif user.coins < pkg.coins %}
+        <a href="{{ url_for('coins') }}" class="btn-secondary btn-block" style="color: #D97706; border-color: #FDE68A;">
+          Need {{ pkg.coins - user.coins }} More Coins (Claim Daily)
+        </a>
+        {% else %}
+        <a href="{{ url_for('create_server', pkg=pkg.id) }}" class="btn-primary btn-block">
+          Select &amp; Create Server →
+        </a>
+        {% endif %}
+      </div>
+
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}

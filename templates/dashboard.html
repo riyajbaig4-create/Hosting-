@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — {{ vip_site_name }}{% endblock %}
+
+{% block content %}
+<div class="container-mobile">
+
+  <!-- Welcome & Profile Hero Card with Rotating Gradient Border -->
+  <div class="welcome-gradient-border-card">
+    <div class="welcome-card-inner">
+      <div style="width: 50px; height: 50px; border-radius: 50%; background: var(--primary-grad); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; font-weight: 800; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25); flex-shrink: 0; overflow: hidden; border: 2px solid #EDE9FE;">
+        {% if current_user.avatar_url %}
+        <img src="{{ current_user.avatar_url }}" alt="{{ current_user.full_name }}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+        {% else %}
+        {{ current_user.full_name[0]|upper if current_user.full_name else (current_user.username[0]|upper) }}
+        {% endif %}
+      </div>
+      <div>
+        <div style="font-size: 0.8rem; color: #64748B; font-weight: 600;">Welcome back,</div>
+        <h1 style="font-size: 1.3rem; font-weight: 800; color: #0F172A; line-height: 1.2;">{{ current_user.full_name }}</h1>
+        <div style="font-size: 0.775rem; color: #10B981; font-weight: 600; display: flex; align-items: center; gap: 5px; margin-top: 2px;">
+          <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #10B981;"></span> Active Account
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live System Update Notices & Announcements -->
+  {% if announcements %}
+  <div style="margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px;">
+    {% for ann in announcements %}
+    <div style="border-radius: 14px; padding: 14px 18px; border: 1.5px solid {% if ann.pinned %}#FDE68A; background: linear-gradient(180deg, #FFFDF5 0%, #FEF9C3 100%){% elif ann.type == 'warning' %}#FED7AA; background: #FFF7ED{% elif ann.type == 'maintenance' %}#E9D5FF; background: #FAF5FF{% elif ann.type == 'info' %}#A7F3D0; background: #F0FDF4{% else %}#C7D2FE; background: #EEF2FF{% endif %}; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+      
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 4px;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          {% if ann.pinned %}
+          <span style="font-size: 0.7rem; font-weight: 800; color: #B45309; background: #FEF3C7; padding: 2px 8px; border-radius: 6px;">
+            📌 PINNED
+          </span>
+          {% endif %}
+          
+          {% if ann.type == 'warning' %}
+          <span style="font-size: 0.7rem; font-weight: 800; color: #C2410C; background: #FFEDD5; padding: 2px 8px; border-radius: 6px;">
+            ⚠️ URGENT
+          </span>
+          {% elif ann.type == 'maintenance' %}
+          <span style="font-size: 0.7rem; font-weight: 800; color: #7E22CE; background: #F3E8FF; padding: 2px 8px; border-radius: 6px;">
+            🛠️ SYSTEM NOTICE
+          </span>
+          {% elif ann.type == 'info' %}
+          <span style="font-size: 0.7rem; font-weight: 800; color: #047857; background: #D1FAE5; padding: 2px 8px; border-radius: 6px;">
+            ℹ️ PLATFORM INFO
+          </span>
+          {% else %}
+          <span style="font-size: 0.7rem; font-weight: 800; color: #4338CA; background: #E0E7FF; padding: 2px 8px; border-radius: 6px;">
+            🚀 SYSTEM UPDATE
+          </span>
+          {% endif %}
+
+          <span style="font-weight: 800; font-size: 0.95rem; color: #0F172A;">{{ ann.title }}</span>
+        </div>
+
+        <span style="font-size: 0.725rem; color: #64748B;">
+          {{ ann.created_at }}
+        </span>
+      </div>
+
+      <p style="font-size: 0.85rem; color: #334155; line-height: 1.5; margin: 4px 0 0 0; white-space: pre-line;">
+        {{ ann.content }}
+      </p>
+
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Metric Statistics Grid -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px;">
+    
+    <div class="vip-card" style="padding: 16px; margin-bottom: 0;">
+      <div style="font-size: 0.775rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Total Servers</div>
+      <div style="font-size: 1.5rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{{ servers|length }}</div>
+      <div style="font-size: 0.75rem; color: #10B981; margin-top: 2px;">⚡ Ready to deploy</div>
+    </div>
+
+    <div class="vip-card" style="padding: 16px; margin-bottom: 0;">
+      <div style="font-size: 0.775rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Total Files</div>
+      <div style="font-size: 1.5rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{{ total_files }}</div>
+      <div style="font-size: 0.75rem; color: #3B82F6; margin-top: 2px;">📁 {{ storage_formatted }} used</div>
+    </div>
+
+    <div class="vip-card" style="padding: 16px; margin-bottom: 0;">
+      <div style="font-size: 0.775rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Platform Status</div>
+      <div style="font-size: 1.5rem; font-weight: 800; color: #10B981; margin-top: 4px;">100%</div>
+      <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">🟢 24/7 Engine Active</div>
+    </div>
+
+    <div class="vip-card" style="padding: 16px; margin-bottom: 0;">
+      <div style="font-size: 0.775rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Daily Reward</div>
+      <div style="font-size: 1.5rem; font-weight: 800; color: #F59E0B; margin-top: 4px;">+10</div>
+      <div style="font-size: 0.75rem; color: #B45309; margin-top: 2px;">🪙 Coins per 24h</div>
+    </div>
+
+  </div>
+
+  <!-- Server Management Section -->
+  <div style="margin-bottom: 16px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px;">
+      <h2 style="font-size: 1.25rem; font-weight: 800; color: #0F172A; margin: 0;">My Python Servers</h2>
+      <a href="{{ url_for('create_server') }}" class="btn-primary btn-sm" style="padding: 8px 16px; white-space: nowrap; flex-shrink: 0;">
+        + Create New Server
+      </a>
+    </div>
+    <p style="font-size: 0.825rem; color: #64748B; margin: 0;">Manage your hosted bots, scripts, and runtime processes.</p>
+  </div>
+
+  <!-- Server Cards List -->
+  {% if servers %}
+  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
+    {% for s in servers %}
+    <div class="vip-card vip-card-interactive" style="display: flex; flex-direction: column; justify-content: space-between; border-color: {% if s.status == 'running' %}#A7F3D0{% elif s.status == 'expired' %}#FECACA{% else %}#E2E8F0{% endif %};">
+      
+      <!-- Card Header -->
+      <div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 38px; height: 38px; border-radius: 10px; background: #F1F5F9; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
+              🐍
+            </div>
+            <div>
+              <h3 style="font-size: 1.05rem; font-weight: 700; color: #0F172A;">{{ s.name }}</h3>
+              <span style="font-size: 0.75rem; color: #64748B; font-family: var(--font-mono);">{{ s.python_version }}</span>
+            </div>
+          </div>
+
+          <!-- Status Indicator -->
+          <div>
+            {% if s.status == 'running' %}
+            <span class="status-badge status-running"><span class="dot"></span> Running</span>
+            {% elif s.status == 'expired' %}
+            <span class="status-badge status-expired"><span class="dot"></span> Expired</span>
+            {% elif s.status == 'starting' %}
+            <span class="status-badge status-starting"><span class="dot"></span> Starting</span>
+            {% else %}
+            <span class="status-badge status-stopped"><span class="dot"></span> Stopped</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Details List -->
+        <div style="background: #F8FAFC; border-radius: 12px; padding: 12px; font-size: 0.825rem; color: #475569; margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: #64748B;">Entry File:</span>
+            <span style="font-weight: 600; font-family: var(--font-mono);">{{ s.entry_file }}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: #64748B;">Created:</span>
+            <span>{{ s.created_at }}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: #64748B;">Expires:</span>
+            <span style="font-weight: 600; color: {% if s.status == 'expired' %}#EF4444{% else %}#0F172A{% endif %};">
+              {{ s.expires_at }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Button -->
+      <div style="display: flex; gap: 8px;">
+        <a href="{{ url_for('server_manage', server_id=s.id) }}" class="btn-primary btn-block" style="padding: 10px; font-size: 0.875rem;">
+          ⚙️ Open / Manage Server
+        </a>
+      </div>
+
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <!-- Empty State -->
+  <div class="vip-card" style="text-align: center; padding: 48px 24px; border: 2px dashed #E2E8F0;">
+    <div style="font-size: 3rem; margin-bottom: 12px;">🚀</div>
+    <h3 style="font-size: 1.2rem; font-weight: 700; color: #0F172A; margin-bottom: 6px;">No Python Servers Yet</h3>
+    <p style="font-size: 0.875rem; color: #64748B; max-width: 380px; margin: 0 auto 20px;">
+      You have <strong class="user-coin-val">{{ current_user.coins }}</strong> coins available. Launch your first 24/7 Python project now!
+    </p>
+    <a href="{{ url_for('create_server') }}" class="btn-primary" style="padding: 12px 28px;">
+      + Create Your First Server
+    </a>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}{{ vip_site_name }} — Python Hosting Platform{% endblock %}
+
+{% block content %}
+<div class="container-mobile">
+  
+  <!-- Hero Showcase Section -->
+  <section class="vip-card" style="text-align: center; padding: 48px 24px; border: 1px solid #E2E8F0; background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);">
+    <div style="display: inline-flex; align-items: center; gap: 8px; background: #EEF2FF; border: 1px solid #C7D2FE; color: #4F46E5; padding: 6px 16px; border-radius: 9999px; font-size: 0.825rem; font-weight: 700; margin-bottom: 20px;">
+      <span>🚀</span>
+      <span>PYTHON HOSTING PLATFORM</span>
+    </div>
+
+    <div style="width: 84px; height: 84px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+      <img src="{{ site_logo_url }}" alt="{{ site_name }} Logo" width="80" height="80" style="max-width: 100%; max-height: 100%; object-fit: contain;" onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/logo.svg') }}';">
+    </div>
+
+    <h1 style="font-size: 2.25rem; font-weight: 900; letter-spacing: -0.03em; color: #0F172A; margin-bottom: 12px;">
+      <span style="background: var(--primary-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">{{ vip_site_name }}</span>
+    </h1>
+
+    <p style="font-size: 1.1rem; font-weight: 600; color: #475569; margin-bottom: 8px;">
+      Fast • Secure • Powerful
+    </p>
+
+    <p style="font-size: 0.95rem; color: #64748B; max-width: 520px; margin: 0 auto 28px; line-height: 1.6;">
+      Deploy 24/7 Python bots, automation, scripts, and background services effortlessly with real-time logs, live file management, and our daily coin reward economy.
+    </p>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-bottom: 24px;">
+      {% if current_user %}
+      <a href="{{ url_for('dashboard') }}" class="btn-primary" style="padding: 14px 32px; font-size: 1rem;">
+        ⚡ Enter Dashboard
+      </a>
+      <a href="{{ url_for('create_server') }}" class="btn-secondary" style="padding: 14px 28px;">
+        + Create New Server
+      </a>
+      {% else %}
+      <a href="{{ url_for('signup') }}" class="btn-primary" style="padding: 14px 32px; font-size: 1rem;">
+        Create Free Account →
+      </a>
+      {% endif %}
+    </div>
+
+    <!-- Quick Stat Badges -->
+    <div style="display: flex; justify-content: center; gap: 24px; border-top: 1px solid #E2E8F0; padding-top: 20px; margin-top: 20px; color: #64748B; font-size: 0.85rem; font-weight: 600;">
+      <div>🟢 99.9% Uptime</div>
+      <div>⚡ Python 3.8 - 3.12+</div>
+      <div>🪙 Daily Coin Rewards</div>
+    </div>
+  </section>
+
+  <!-- Core Features Grid -->
+  <section id="features" style="margin-top: 32px;">
+    <h2 style="font-size: 1.35rem; font-weight: 800; color: #0F172A; text-align: center; margin-bottom: 20px;">
+      Built for Python Creators
+    </h2>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+      
+      <!-- Feature 1 -->
+      <div class="vip-card vip-card-interactive">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #EEF2FF; color: #4F46E5; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; margin-bottom: 14px;">
+          ⏱️
+        </div>
+        <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 6px;">24/7 Hosting</h3>
+        <p style="font-size: 0.875rem; color: #64748B; line-height: 1.5;">
+          Keep Telegram bots, Discord bots, schedulers, and background tasks active continuously with automatic process recovery.
+        </p>
+      </div>
+
+      <!-- Feature 2 -->
+      <div class="vip-card vip-card-interactive">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #ECFDF5; color: #059669; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; margin-bottom: 14px;">
+          🎮
+        </div>
+        <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 6px;">Easy Server Management</h3>
+        <p style="font-size: 0.875rem; color: #64748B; line-height: 1.5;">
+          Intuitive 🟢 START, 🟠 RESTART, and 🔴 STOP controls connected to our responsive Python process manager.
+        </p>
+      </div>
+
+      <!-- Feature 3 -->
+      <div class="vip-card vip-card-interactive">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #FDF2F8; color: #DB2777; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; margin-bottom: 14px;">
+          🔒
+        </div>
+        <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 6px;">Secure &amp; Private</h3>
+        <p style="font-size: 0.875rem; color: #64748B; line-height: 1.5;">
+          Every user runs in strict isolated server directories with sandboxed file managers, zip-slip defense, and encrypted credentials.
+        </p>
+      </div>
+
+      <!-- Feature 4 -->
+      <div class="vip-card vip-card-interactive">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #FFFBEB; color: #D97706; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; margin-bottom: 14px;">
+          🪙
+        </div>
+        <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 6px;">Coin Reward Economy</h3>
+        <p style="font-size: 0.875rem; color: #64748B; line-height: 1.5;">
+          Claim 10 free coins every 24 hours. Use coins to deploy new servers or renew existing instances easily.
+        </p>
+      </div>
+
+      <!-- Feature 5 -->
+      <div class="vip-card vip-card-interactive">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #F0FDF4; color: #16A34A; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; margin-bottom: 14px;">
+          📦
+        </div>
+        <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 6px;">Package Auto-Detect</h3>
+        <p style="font-size: 0.875rem; color: #64748B; line-height: 1.5;">
+          Auto-scan <code>requirements.txt</code> and install libraries with live progress feedback directly inside your control panel.
+        </p>
+      </div>
+
+      <!-- Feature 6 -->
+      <div class="vip-card vip-card-interactive">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #F5F3FF; color: #7C3AED; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; margin-bottom: 14px;">
+          📜
+        </div>
+        <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 6px;">Live Terminal Stream</h3>
+        <p style="font-size: 0.875rem; color: #64748B; line-height: 1.5;">
+          Monitor real-time stdout, stderr, and categorized logs with instant filtering and clear terminal controls.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Server Packages Showcase -->
+  <section id="pricing" style="margin-top: 36px;">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <h2 style="font-size: 1.35rem; font-weight: 800; color: #0F172A;">Hosting Packages</h2>
+      <p style="font-size: 0.9rem; color: #64748B;">Transparent coin-based hosting. No credit card required.</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+      {% for pkg in packages %}
+      <div class="vip-card" style="display: flex; flex-direction: column; justify-content: space-between; position: relative; border-color: {% if pkg.is_first_time_offer %}#C4B5FD{% else %}#E2E8F0{% endif %};">
+        {% if pkg.is_first_time_offer %}
+        <div style="position: absolute; top: -10px; right: 16px; background: var(--primary-grad); color: #fff; font-size: 0.675rem; font-weight: 800; text-transform: uppercase; padding: 3px 10px; border-radius: 9999px;">
+          ★ First Time Offer
+        </div>
+        {% endif %}
+        <div>
+          <h3 style="font-size: 1.15rem; font-weight: 700; color: #0F172A; margin-bottom: 4px;">{{ pkg.name }}</h3>
+          <p style="font-size: 0.825rem; color: #64748B; margin-bottom: 16px;">{{ pkg.description }}</p>
+          
+          <div style="display: flex; align-items: baseline; gap: 6px; margin-bottom: 16px;">
+            <span style="font-size: 1.85rem; font-weight: 800; color: #7C3AED;">{{ pkg.coins }}</span>
+            <span style="font-size: 0.95rem; font-weight: 700; color: #475569;">Coins</span>
+            <span style="color: #94A3B8; font-size: 0.85rem;">/ {{ pkg.days }} Days</span>
+          </div>
+
+          <ul style="list-style: none; padding: 0; font-size: 0.875rem; color: #475569; margin-bottom: 20px;">
+            <li style="margin-bottom: 8px;">✓ <strong>{{ pkg.days }} Days</strong> Continuous Runtime</li>
+            <li style="margin-bottom: 8px;">✓ Real-time Terminal Logs</li>
+            <li style="margin-bottom: 8px;">✓ Full ZIP &amp; File Manager</li>
+            <li style="margin-bottom: 8px;">✓ Unlimited Restart Controls</li>
+          </ul>
+        </div>
+
+        <div>
+          {% if current_user %}
+          <a href="{{ url_for('create_server', pkg=pkg.id) }}" class="btn-primary btn-block">
+            Deploy with {{ pkg.coins }} Coins
+          </a>
+          {% else %}
+          <a href="{{ url_for('signup') }}" class="btn-primary btn-block">
+            Get Started
+          </a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- CTA Box -->
+  <section class="vip-card" style="margin-top: 36px; text-align: center; padding: 36px 20px; background: linear-gradient(135deg, #F8FAFC 0%, #EEF2FF 100%); border-color: #C7D2FE;">
+    <h2 style="font-size: 1.4rem; font-weight: 800; color: #1E1B4B; margin-bottom: 8px;">
+      Ready to host your Python bot?
+    </h2>
+    <p style="font-size: 0.925rem; color: #4338CA; max-width: 480px; margin: 0 auto 20px;">
+      Register now and receive instant welcome coins to launch your first 24/7 Python project immediately.
+    </p>
+    {% if not current_user %}
+    <a href="{{ url_for('signup') }}" class="btn-primary" style="padding: 12px 28px;">
+      Create Free Account →
+    </a>
+    {% else %}
+    <a href="{{ url_for('create_server') }}" class="btn-primary" style="padding: 12px 28px;">
+      Launch Server Now →
+    </a>
+    {% endif %}
+  </section>
+
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% if server.status == 'expired' %}
+<div id="expired-server-modal" class="maintenance-overlay" style="display: flex; position: fixed; inset: 0; z-index: 100000; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); align-items: center; justify-content: center; padding: 16px;">
+  <div class="maintenance-card" style="text-align: left; max-width: 480px; width: 100%; padding: 26px 22px; border-radius: var(--radius-lg); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid #FECACA; background: #FFFFFF;">
+    
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
+      <div style="width: 48px; height: 48px; border-radius: 50%; background: #FEF2F2; color: #EF4444; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; border: 1px solid #FCA5A5; flex-shrink: 0; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);">
+        ⚠️
+      </div>
+      <div>
+        <h3 style="font-size: 1.2rem; font-weight: 800; color: #0F172A; margin: 0;">Update Server</h3>
+        <span style="font-size: 0.75rem; color: #EF4444; font-weight: 700; text-transform: uppercase;">Server Expired</span>
+      </div>
+    </div>
+
+    <p style="font-size: 0.875rem; color: #475569; margin-bottom: 16px; line-height: 1.5; background: #FFF5F5; padding: 12px 14px; border-radius: 10px; border-left: 4px solid #EF4444;">
+      <strong>Server Expired!</strong> Please renew your plan to continue using this server. File execution, startup, and management tools are currently locked.
+    </p>
+
+    <div style="margin-bottom: 14px; font-size: 0.85rem; color: #475569; display: flex; justify-content: space-between; align-items: center; background: #F8FAFC; padding: 10px 14px; border-radius: 10px; border: 1px solid #E2E8F0;">
+      <span>Your Coins Balance:</span>
+      <strong style="color: #7C3AED; font-weight: 800; font-size: 0.95rem;">🪙 <span class="user-coin-val">{{ current_user.coins }}</span> Coins</strong>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; max-height: 230px; overflow-y: auto;">
+      {% if packages %}
+        {% for p in packages %}
+        <label style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border: 1.5px solid #E2E8F0; border-radius: 12px; cursor: pointer; transition: all 0.15s ease; background: #FFFFFF;" onmouseover="this.style.borderColor='#7C3AED'; this.style.background='#F8FAFC';" onmouseout="this.style.borderColor='#E2E8F0'; this.style.background='#FFFFFF';">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <input type="radio" name="renew_package_id" value="{{ p.id }}" {% if loop.first %}checked{% endif %} style="accent-color: #7C3AED; width: 16px; height: 16px;">
+            <div>
+              <div style="font-weight: 700; color: #0F172A; font-size: 0.9rem;">+{{ p.days }} Days Extension</div>
+              <div style="font-size: 0.75rem; color: #64748B;">{{ p.name }}</div>
+            </div>
+          </div>
+          <div style="font-weight: 800; color: #7C3AED; font-size: 0.95rem;">
+            {{ p.coins }} Coins
+          </div>
+        </label>
+        {% endfor %}
+      {% else %}
+        <div style="font-size: 0.85rem; color: #64748B;">No renewal packages available.</div>
+      {% endif %}
+    </div>
+
+    <button id="expired-renew-btn" onclick="submitRenewal({{ server.id }})" class="btn-primary btn-block" style="padding: 14px; font-size: 0.95rem; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 10px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);">
+      🔄 Update Server Now
+    </button>
+  </div>
+</div>
+{% endif %}

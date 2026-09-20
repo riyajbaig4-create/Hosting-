@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Create Server — {{ vip_site_name }}{% endblock %}
+
+{% block content %}
+<div class="container-mobile" style="max-width: 540px; margin-top: 16px;">
+
+  <div class="vip-card" style="padding: 28px 24px;">
+    
+    <!-- Top Header -->
+    <div style="margin-bottom: 22px;">
+      <h1 style="font-size: 1.4rem; font-weight: 800; color: #0F172A; margin: 0 0 4px 0; line-height: 1.2;">Create New Server</h1>
+      <p style="font-size: 0.85rem; color: #64748B; margin: 0; line-height: 1.4;">Deploy an isolated 24/7 Python instance.</p>
+    </div>
+
+    <!-- Create Server Form -->
+    <form action="{{ url_for('create_server') }}" method="POST">
+      
+      <!-- Server Name -->
+      <div class="form-group">
+        <label class="form-label" for="name">Server Name</label>
+        <input 
+          type="text" 
+          id="name" 
+          name="name" 
+          class="form-control" 
+          placeholder="e.g. My Telegram Bot" 
+          required
+        >
+        <span style="font-size: 0.75rem; color: #94A3B8; margin-top: 4px; display: block;">
+          Give your server an identifiable project name.
+        </span>
+      </div>
+
+      <!-- Package Selection -->
+      <div class="form-group">
+        <label class="form-label" for="package_id">Hosting Package</label>
+        <select id="package_id" name="package_id" class="form-control" required style="cursor: pointer;">
+          {% for pkg in packages %}
+            {% if not (pkg.is_first_time_offer and user.first_time_offer_used) %}
+            <option value="{{ pkg.id }}" {% if selected_pkg_id == pkg.id %}selected{% endif %}>
+              {{ pkg.name }} — {{ pkg.days }} Days ({{ pkg.coins }} Coins){% if pkg.is_first_time_offer %} [★ One-Time Offer]{% endif %}
+            </option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Python Version -->
+      <div class="form-group">
+        <label class="form-label" for="python_version">Python Runtime Version</label>
+        <select id="python_version" name="python_version" class="form-control" style="cursor: pointer;">
+          <option value="Python 3.12">Python 3.12 (High Performance)</option>
+          <option value="Python 3.11">Python 3.11</option>
+          <option value="Python 3.10" selected>Python 3.10 (Standard / Recommended)</option>
+          <option value="Python 3.9">Python 3.9</option>
+          <option value="Python 3.8">Python 3.8</option>
+        </select>
+        <span style="font-size: 0.75rem; color: #94A3B8; margin-top: 4px; display: block;">
+          System auto-adapts to container environment.
+        </span>
+      </div>
+
+      <!-- Features Checklist Banner -->
+      <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 14px; margin-bottom: 24px; font-size: 0.825rem; color: #475569;">
+        <div style="font-weight: 700; color: #0F172A; margin-bottom: 6px;">Included with every {{ site_name }} Server:</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+          <div>✓ Starter <code>main.py</code> script</div>
+          <div>✓ Live terminal logs</div>
+          <div>✓ ZIP upload &amp; extract</div>
+          <div>✓ 24/7 background runtime</div>
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <button type="submit" class="btn-primary btn-block" style="padding: 12px; font-size: 0.95rem;">
+        🚀 Create Server &amp; Launch
+      </button>
+    </form>
+
+    <div style="text-align: center; margin-top: 16px;">
+      <a href="{{ url_for('dashboard') }}" style="font-size: 0.85rem; color: #64748B;">← Cancel and return to Dashboard</a>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}

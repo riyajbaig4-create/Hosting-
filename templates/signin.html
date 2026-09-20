@@ -1,0 +1,467 @@
+{% extends "base.html" %}
+
+{% block title %}Sign In — {{ vip_site_name }}{% endblock %}
+
+{% block content %}
+<div class="container-mobile" style="max-width: 440px; margin-top: 24px;">
+
+  <div class="vip-card" style="padding: 32px 24px;">
+    <!-- Brand Header -->
+    <div style="text-align: center; margin-bottom: 24px;">
+      <div style="width: 58px; height: 58px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center;">
+        <img src="{{ site_logo_url }}" alt="{{ site_name }}" width="54" height="54" style="max-width: 100%; max-height: 100%; object-fit: contain;" onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/logo.svg') }}';">
+      </div>
+      <h1 style="font-size: 1.5rem; font-weight: 800; color: #0F172A; margin-bottom: 4px;">Welcome Back</h1>
+      <p style="font-size: 0.875rem; color: #64748B;">Sign in to your {{ site_name }} account to manage servers.</p>
+    </div>
+
+    <!-- Sign In Form -->
+    <form action="{{ url_for('signin') }}" method="POST">
+      <div class="form-group">
+        <label class="form-label" for="email">Email Address</label>
+        <input 
+          type="email" 
+          id="email" 
+          name="email" 
+          class="form-control" 
+          placeholder="yourname@gmail.com" 
+          value="{{ email or '' }}" 
+          required 
+          autocomplete="email"
+        >
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <input 
+          type="password" 
+          id="password" 
+          name="password" 
+          class="form-control" 
+          placeholder="••••••••" 
+          required 
+          autocomplete="current-password"
+        >
+      </div>
+
+      <!-- Remember Me Checkbox & Forgot Password -->
+      <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; margin-top: 16px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input 
+            type="checkbox" 
+            id="remember" 
+            name="remember" 
+            style="accent-color: var(--primary-purple); width: 18px; height: 18px; cursor: pointer;"
+          >
+          <label for="remember" style="font-size: 0.9rem; color: var(--text-secondary); cursor: pointer; user-select: none;">
+            Remember Me
+          </label>
+        </div>
+        <div id="forgot-password-container">
+          <a href="#" id="forgot-password-link" onclick="openForgotPasswordModal(); return false;" style="font-size: 0.85rem; color: var(--primary-purple); font-weight: 600; text-decoration: none;">
+            Forgot Password?
+          </a>
+          <span id="forgot-password-timer" style="display: none; font-size: 0.85rem; color: #EF4444; font-weight: 700;"></span>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-primary btn-block" style="padding: 12px; font-size: 0.95rem; font-weight: 700; border-radius: 8px;">
+        Sign In
+      </button>
+    </form>
+
+    <!-- Switch to Signup -->
+    <div style="text-align: center; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-light); font-size: 0.875rem; color: var(--text-secondary);">
+      Don't have an account? 
+      <a href="{{ url_for('signup') }}" style="color: var(--primary-purple); font-weight: 700;">Create Account</a>
+    </div>
+  </div>
+
+</div>
+
+<!-- Forgot Password Step-by-Step Modal -->
+<div id="forgot-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; padding: 16px; backdrop-filter: blur(4px);">
+  <div class="vip-card" style="width: 100%; max-width: 440px; padding: 32px 24px; position: relative; background: #FFFFFF; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); border-radius: 12px;">
+    
+    <!-- Close Button -->
+    <button type="button" onclick="closeForgotPasswordModal()" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 1.5rem; color: #64748B; cursor: pointer; line-height: 1;" onmouseover="this.style.color='#0F172A'" onmouseout="this.style.color='#64748B'">&times;</button>
+    
+    <!-- Modal Title -->
+    <div style="text-align: center; margin-bottom: 24px;">
+      <h2 style="font-size: 1.35rem; font-weight: 800; color: #0F172A; margin-bottom: 6px;">Reset Password</h2>
+      <p style="font-size: 0.85rem; color: #64748B;">Follow the step-by-step verification process to reset your password.</p>
+    </div>
+
+    <!-- Progress Steps Indicator -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; background: #F8FAFC; padding: 8px 12px; border-radius: 8px; border: 1px solid #E2E8F0;">
+      <div id="badge-step-1" style="font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 4px; color: #4F46E5;">
+        <span class="step-num" style="display: inline-flex; width: 18px; height: 18px; border-radius: 50%; background: #4F46E5; color: #fff; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 800;">1</span> Challenge
+      </div>
+      <div style="flex: 1; height: 1px; background: #E2E8F0; margin: 0 8px;"></div>
+      <div id="badge-step-2" style="font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 4px; color: #94A3B8;">
+        <span class="step-num" style="display: inline-flex; width: 18px; height: 18px; border-radius: 50%; background: #CBD5E1; color: #64748B; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 800;">2</span> Email
+      </div>
+      <div style="flex: 1; height: 1px; background: #E2E8F0; margin: 0 8px;"></div>
+      <div id="badge-step-3" style="font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 4px; color: #94A3B8;">
+        <span class="step-num" style="display: inline-flex; width: 18px; height: 18px; border-radius: 50%; background: #CBD5E1; color: #64748B; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 800;">3</span> Password
+      </div>
+    </div>
+
+    <!-- STEP 1 CONTAINER: CAPTCHA -->
+    <div id="step-1-container">
+      <div class="form-group">
+        <label class="form-label" style="font-weight: 700; color: #334155; margin-bottom: 8px; display: block;">Step 1: Security Challenge</label>
+        <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 16px;">Please solve this arithmetic security question to proceed:</p>
+        
+        <div style="background: #EEF2FF; border: 1px solid #C7D2FE; padding: 16px; border-radius: 8px; text-align: center; margin-bottom: 16px;">
+          <span id="captcha-question" style="font-size: 1.4rem; font-weight: 800; color: #4F46E5; letter-spacing: 2px;">Loading question...</span>
+        </div>
+        
+        <input 
+          type="number" 
+          id="captcha-answer" 
+          class="form-control" 
+          placeholder="Enter correct answer" 
+          style="text-align: center; font-size: 1.1rem; font-weight: 700; padding: 12px; border-color: #CBD5E1; border-radius: 8px; width: 100%;"
+        >
+        <div id="captcha-error" style="color: #EF4444; font-size: 0.85rem; display: none; margin-top: 8px; font-weight: 600;"></div>
+      </div>
+      
+      <button type="button" onclick="submitCaptcha()" class="btn-primary btn-block" style="padding: 12px; font-size: 0.95rem; font-weight: 700; border-radius: 8px; margin-top: 16px; background: #4F46E5; border-color: #4F46E5; width: 100%;">
+        Verify Answer &rarr;
+      </button>
+    </div>
+
+    <!-- STEP 2 CONTAINER: EMAIL -->
+    <div id="step-2-container" style="display: none;">
+      <div class="form-group">
+        <label class="form-label" for="reset-email" style="font-weight: 700; color: #334155; margin-bottom: 8px; display: block;">Step 2: Account Email</label>
+        <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 16px;">Please enter your registered email address to verify your account identity.</p>
+        
+        <input 
+          type="email" 
+          id="reset-email" 
+          class="form-control" 
+          placeholder="yourname@gmail.com" 
+          style="padding: 12px; border-color: #CBD5E1; border-radius: 8px; width: 100%;"
+        >
+        <div id="email-error" style="color: #EF4444; font-size: 0.85rem; display: none; margin-top: 8px; font-weight: 600;"></div>
+      </div>
+      
+      <button type="button" onclick="submitEmail()" class="btn-primary btn-block" style="padding: 12px; font-size: 0.95rem; font-weight: 700; border-radius: 8px; margin-top: 16px; background: #4F46E5; border-color: #4F46E5; width: 100%;">
+        Verify Email Address &rarr;
+      </button>
+    </div>
+
+    <!-- STEP 3 CONTAINER: NEW PASSWORD -->
+    <div id="step-3-container" style="display: none;">
+      <div class="form-group">
+        <label class="form-label" style="font-weight: 700; color: #334155; margin-bottom: 8px; display: block;">Step 3: New Password</label>
+        <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 16px;">Set your new secure login password. This will instantly replace your old password.</p>
+        
+        <div style="margin-bottom: 14px;">
+          <label style="font-size: 0.8rem; font-weight: 700; color: #64748B; display: block; margin-bottom: 4px;">New Password</label>
+          <input 
+            type="password" 
+            id="reset-password" 
+            class="form-control" 
+            placeholder="Min 6 characters" 
+            style="padding: 12px; border-color: #CBD5E1; border-radius: 8px; width: 100%;"
+          >
+        </div>
+        
+        <div>
+          <label style="font-size: 0.8rem; font-weight: 700; color: #64748B; display: block; margin-bottom: 4px;">Confirm Password</label>
+          <input 
+            type="password" 
+            id="reset-confirm" 
+            class="form-control" 
+            placeholder="Repeat new password" 
+            style="padding: 12px; border-color: #CBD5E1; border-radius: 8px; width: 100%;"
+          >
+        </div>
+        
+        <div id="reset-error" style="color: #EF4444; font-size: 0.85rem; display: none; margin-top: 8px; font-weight: 600;"></div>
+      </div>
+      
+      <button type="button" onclick="submitPasswordReset()" class="btn-primary btn-block" style="padding: 12px; font-size: 0.95rem; font-weight: 700; border-radius: 8px; margin-top: 16px; background: #10B981; border-color: #10B981; width: 100%;">
+        Change Password &nbsp;✓
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let timerInterval = null;
+
+function checkForgotTimer() {
+  const resetTimeStr = localStorage.getItem("forgot_password_reset_timestamp");
+  if (!resetTimeStr) {
+    document.getElementById("forgot-password-link").style.display = "inline";
+    document.getElementById("forgot-password-timer").style.display = "none";
+    return;
+  }
+  
+  const resetTime = parseInt(resetTimeStr, 10);
+  const totalCooldown = 5 * 60 * 1000; // 5 minutes in ms
+  
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+  
+  function updateTimer() {
+    const elapsed = Date.now() - resetTime;
+    const remaining = totalCooldown - elapsed;
+    
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      localStorage.removeItem("forgot_password_reset_timestamp");
+      document.getElementById("forgot-password-link").style.display = "inline";
+      document.getElementById("forgot-password-timer").style.display = "none";
+    } else {
+      document.getElementById("forgot-password-link").style.display = "none";
+      document.getElementById("forgot-password-timer").style.display = "inline";
+      
+      const totalSec = Math.ceil(remaining / 1000);
+      const min = Math.floor(totalSec / 60).toString().padStart(2, '0');
+      const sec = (totalSec % 60).toString().padStart(2, '0');
+      document.getElementById("forgot-password-timer").textContent = `Try again in ${min}:${sec}`;
+    }
+  }
+  
+  updateTimer();
+  timerInterval = setInterval(updateTimer, 1000);
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  const emailInput = document.getElementById("email");
+  const passwordInput = document.getElementById("password");
+  const rememberCheckbox = document.getElementById("remember");
+  const loginForm = document.querySelector("form");
+
+  // Check on load if forgot password timer is active
+  checkForgotTimer();
+
+  // Load saved credentials on page load
+  if (localStorage.getItem("hostx_remember") === "true") {
+    emailInput.value = localStorage.getItem("hostx_email") || "";
+    passwordInput.value = localStorage.getItem("hostx_password") || "";
+    rememberCheckbox.checked = true;
+  }
+
+  // Handle form submission
+  loginForm.addEventListener("submit", function(e) {
+    if (rememberCheckbox.checked) {
+      localStorage.setItem("hostx_email", emailInput.value);
+      localStorage.setItem("hostx_password", passwordInput.value);
+      localStorage.setItem("hostx_remember", "true");
+    } else {
+      localStorage.removeItem("hostx_email");
+      localStorage.removeItem("hostx_password");
+      localStorage.setItem("hostx_remember", "false");
+    }
+  });
+});
+
+// Setup variables for step wizard
+let currentStep = 1;
+
+// Show the forgot password modal
+function openForgotPasswordModal() {
+  document.getElementById("forgot-modal").style.display = "flex";
+  currentStep = 1;
+  showStep(1);
+  loadCaptcha();
+}
+
+function closeForgotPasswordModal() {
+  document.getElementById("forgot-modal").style.display = "none";
+}
+
+function showStep(step) {
+  document.getElementById("step-1-container").style.display = step === 1 ? "block" : "none";
+  document.getElementById("step-2-container").style.display = step === 2 ? "block" : "none";
+  document.getElementById("step-3-container").style.display = step === 3 ? "block" : "none";
+  
+  // Step 1 Badge
+  const b1 = document.getElementById("badge-step-1");
+  const num1 = b1.querySelector(".step-num");
+  if (step >= 1) {
+    b1.style.color = "#4F46E5";
+    num1.style.background = "#4F46E5";
+    num1.style.color = "#FFFFFF";
+  } else {
+    b1.style.color = "#94A3B8";
+    num1.style.background = "#CBD5E1";
+    num1.style.color = "#64748B";
+  }
+
+  // Step 2 Badge
+  const b2 = document.getElementById("badge-step-2");
+  const num2 = b2.querySelector(".step-num");
+  if (step >= 2) {
+    b2.style.color = "#4F46E5";
+    num2.style.background = "#4F46E5";
+    num2.style.color = "#FFFFFF";
+  } else {
+    b2.style.color = "#94A3B8";
+    num2.style.background = "#CBD5E1";
+    num2.style.color = "#64748B";
+  }
+
+  // Step 3 Badge
+  const b3 = document.getElementById("badge-step-3");
+  const num3 = b3.querySelector(".step-num");
+  if (step >= 3) {
+    b3.style.color = "#10B981";
+    num3.style.background = "#10B981";
+    num3.style.color = "#FFFFFF";
+  } else {
+    b3.style.color = "#94A3B8";
+    num3.style.background = "#CBD5E1";
+    num3.style.color = "#64748B";
+  }
+}
+
+// Step 1: Load Captcha Challenge from backend
+function loadCaptcha() {
+  const errorDiv = document.getElementById("captcha-error");
+  errorDiv.style.display = "none";
+  const questionSpan = document.getElementById("captcha-question");
+  questionSpan.textContent = "Loading question...";
+  
+  fetch('/api/forgot-password/captcha')
+    .then(r => r.json())
+    .then(data => {
+      questionSpan.textContent = data.question;
+      document.getElementById("captcha-answer").value = "";
+    })
+    .catch(err => {
+      questionSpan.textContent = "Error loading challenge";
+    });
+}
+
+// Step 1: Verify Captcha
+function submitCaptcha() {
+  const answer = document.getElementById("captcha-answer").value;
+  const errorDiv = document.getElementById("captcha-error");
+  errorDiv.style.display = "none";
+  
+  if (!answer) {
+    errorDiv.textContent = "Please solve the security challenge.";
+    errorDiv.style.display = "block";
+    return;
+  }
+  
+  fetch('/api/forgot-password/verify-captcha', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answer: answer })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      currentStep = 2;
+      showStep(2);
+    } else {
+      errorDiv.textContent = data.message || "Incorrect answer, please try again.";
+      errorDiv.style.display = "block";
+      loadCaptcha(); // Reload captcha on failure
+    }
+  })
+  .catch(err => {
+    errorDiv.textContent = "Connection error. Please try again.";
+    errorDiv.style.display = "block";
+  });
+}
+
+// Step 2: Verify Registered Email
+function submitEmail() {
+  const email = document.getElementById("reset-email").value.trim();
+  const errorDiv = document.getElementById("email-error");
+  errorDiv.style.display = "none";
+  
+  if (!email) {
+    errorDiv.textContent = "Please enter your registered email address.";
+    errorDiv.style.display = "block";
+    return;
+  }
+  
+  fetch('/api/forgot-password/verify-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      currentStep = 3;
+      showStep(3);
+    } else {
+      errorDiv.textContent = data.message || "This email is not registered.";
+      errorDiv.style.display = "block";
+    }
+  })
+  .catch(err => {
+    errorDiv.textContent = "Connection error. Please try again.";
+    errorDiv.style.display = "block";
+  });
+}
+
+// Step 3: Change Password
+function submitPasswordReset() {
+  const password = document.getElementById("reset-password").value;
+  const confirm = document.getElementById("reset-confirm").value;
+  const errorDiv = document.getElementById("reset-error");
+  errorDiv.style.display = "none";
+  
+  if (!password || !confirm) {
+    errorDiv.textContent = "All password fields are required.";
+    errorDiv.style.display = "block";
+    return;
+  }
+  
+  if (password !== confirm) {
+    errorDiv.textContent = "Passwords do not match.";
+    errorDiv.style.display = "block";
+    return;
+  }
+  
+  if (password.length < 6) {
+    errorDiv.textContent = "Password must be at least 6 characters.";
+    errorDiv.style.display = "block";
+    return;
+  }
+  
+  fetch('/api/forgot-password/reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: password, confirm_password: confirm })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      // Set timestamp and trigger 5-minute background timer
+      localStorage.setItem("forgot_password_reset_timestamp", Date.now().toString());
+      checkForgotTimer();
+      
+      showToast("Password updated successfully! Please log in.", "success");
+      closeForgotPasswordModal();
+      // Pre-populate input fields
+      document.getElementById("email").value = document.getElementById("reset-email").value;
+      document.getElementById("password").value = "";
+    } else {
+      errorDiv.textContent = data.message || "An error occurred.";
+      errorDiv.style.display = "block";
+    }
+  })
+  .catch(err => {
+    errorDiv.textContent = "Connection error. Please try again.";
+    errorDiv.style.display = "block";
+  });
+}
+</script>
+{% endblock %}

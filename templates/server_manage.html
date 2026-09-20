@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Server: {{ server.name }} — {{ vip_site_name }}{% endblock %}
+
+{% block content %}
+<div class="container-mobile">
+
+  <!-- Back Navigation Button -->
+  <div style="margin-top: 2px; margin-bottom: 8px;">
+    <a href="{{ url_for('dashboard') }}" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; border-radius: 10px; padding: 6px 13px; font-size: 0.825rem; color: #334155; text-decoration: none; background: #FFFFFF; border: 1px solid #E2E8F0; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05); transition: all 0.15s ease;" onmouseover="this.style.borderColor='#C4B5FD'; this.style.color='#7C3AED';" onmouseout="this.style.borderColor='#E2E8F0'; this.style.color='#334155';">
+      ← Back
+    </a>
+  </div>
+
+  <!-- Server Brand & Name Banner -->
+  <div class="vip-card" style="padding: 20px 24px; margin-bottom: 16px; background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%);">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+      
+      <div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 0.8rem; font-weight: 800; color: #7C3AED; text-transform: uppercase; letter-spacing: 0.05em;">HOSTING PLATFORM</span>
+          <span style="color: #CBD5E1;">•</span>
+          <span style="font-size: 0.8rem; color: #64748B; font-weight: 700;">Server ID: #{{ server.id }}</span>
+        </div>
+        <h1 style="font-size: 1.5rem; font-weight: 900; color: #0F172A; margin: 2px 0;">
+          Server: <span style="background: var(--primary-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">{{ server.name }}</span>
+        </h1>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span id="server-status-badge" class="status-badge status-{{ server.status }}" style="font-weight: 800; border-radius: 8px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px;">
+          {% if server.status == 'running' %}
+            🟢 RUNNING
+          {% elif server.status == 'package_required' %}
+            🟡 PACKAGE REQUIRED
+          {% else %}
+            🔴 STOPPED
+          {% endif %}
+        </span>
+        <button onclick="document.getElementById('renew-modal').style.display='flex'" class="btn-secondary btn-sm" style="font-weight: 800; border-radius: 8px; padding: 8px 14px; border-color: #C4B5FD; color: #6D28D9; background: #FFFFFF; transition: all 0.2s; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);" onmouseover="this.style.background='#F1F5F9'; this.style.borderColor='#8B5CF6';" onmouseout="this.style.background='#FFFFFF'; this.style.borderColor='#C4B5FD';">
+          ⏳ Extend / Renew
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Sub Navigation Tabs -->
+  <div class="sub-nav-tabs">
+    <a href="{{ url_for('server_manage', server_id=server.id) }}" class="sub-nav-tab active">
+      📊 Logs
+    </a>
+    <a href="{{ url_for('file_manager', server_id=server.id) }}" class="sub-nav-tab">
+      📁 Files
+    </a>
+    <a href="{{ url_for('server_startup', server_id=server.id) }}" class="sub-nav-tab">
+      ⚙️ Startup
+    </a>
+  </div>
+
+  <!-- Server Control Buttons Card -->
+  <div class="vip-card" style="padding: 20px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+      <h2 style="font-size: 1.05rem; font-weight: 800; color: #0F172A;">Server Operations</h2>
+      <span id="server-pid-badge" class="{{ 'pid-active' if server.status == 'running' and server.pid else 'pid-offline' }}" style="font-size: 0.775rem; font-weight: 600; font-family: var(--font-mono); padding: 3px 10px; border-radius: 6px; transition: all 0.2s ease; {{ 'background: rgba(16, 185, 129, 0.12); color: #059669; border: 1px solid rgba(16, 185, 129, 0.3);' if server.status == 'running' and server.pid else 'background: #F1F5F9; color: #64748B; border: 1px solid #E2E8F0;' }}">PID: {{ server.pid if (server.status == 'running' and server.pid) else 'Offline' }}</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+      <!-- START BUTTON -->
+      <button 
+        id="btn-start-server" 
+        onclick="handleStartServerClick({{ server.id }}, {{ 'true' if scan and scan.has_entry_file else 'false' }})" 
+        class="btn-success" 
+        style="padding: 12px 10px; font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;"
+        {% if server.status == 'running' or server.status == 'expired' %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}
+      >
+        🟢 START
+      </button>
+
+      <!-- RESTART BUTTON -->
+      <button 
+        id="btn-restart-server" 
+        onclick="executeServerAction({{ server.id }}, 'restart')" 
+        class="btn-warning" 
+        style="padding: 12px 10px; font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px;"
+        {% if server.status == 'expired' %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}
+      >
+        🟠 RESTART
+      </button>
+
+      <!-- STOP BUTTON -->
+      <button 
+        id="btn-stop-server" 
+        onclick="executeServerAction({{ server.id }}, 'stop')" 
+        class="btn-danger" 
+        style="padding: 12px 10px; font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px;"
+        {% if server.status == 'stopped' or server.status == 'package_required' or server.status == 'expired' %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}
+      >
+        🔴 STOP
+      </button>
+    </div>
+  </div>
+
+  <!-- Live Log Terminal Section -->
+  <div class="vip-card" style="padding: 16px; margin-bottom: 16px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 1.1rem;">📜</span>
+        <h2 style="font-size: 1.1rem; font-weight: 800; color: #0F172A;">Logs (Live)</h2>
+        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10B981; animation: pulseDot 1.5s infinite;"></span>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <button onclick="clearLogs({{ server.id }})" class="btn-secondary btn-sm" style="font-size: 0.775rem;" {% if server.status == 'expired' %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}>
+          🧹 Clear Logs
+        </button>
+      </div>
+    </div>
+
+    <!-- Terminal Screen Box -->
+    <div id="live-terminal" class="terminal-box">
+      <div class="log-line log-info">[INFO] Connecting to {{ site_name }} log streaming engine...</div>
+    </div>
+  </div>
+
+  <!-- Server Metadata Stats -->
+  <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px;">
+    
+    <!-- Card 1: Entry File (Replaces Runtime in position 1) -->
+    <div class="vip-card" style="padding: 14px; margin-bottom: 0;">
+      <div style="font-size: 0.725rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Entry File</div>
+      <div style="font-size: 1rem; font-weight: 800; color: #0F172A; margin-top: 2px; font-family: var(--font-mono);">{{ server.entry_file }}</div>
+    </div>
+
+    <!-- Card 2: STATUS & UPTIME (Replaces Entry File in position 2) -->
+    <div class="vip-card" id="status-uptime-card" style="padding: 14px; margin-bottom: 0;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-size: 0.725rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Status</div>
+        <div id="card-uptime-counter" style="font-size: 0.75rem; font-weight: 700; color: #64748B; font-family: var(--font-mono);">
+          00:00:00
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 6px; margin-top: 3px;">
+        <span id="card-status-dot" style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: {% if server.status == 'running' %}#10B981{% else %}#EF4444{% endif %}; flex-shrink: 0;"></span>
+        <span id="card-status-text" style="font-size: 0.95rem; font-weight: 800; color: {% if server.status == 'running' %}#10B981{% else %}#EF4444{% endif %};">
+          {% if server.status == 'running' %}Running{% else %}Offline{% endif %}
+        </span>
+      </div>
+    </div>
+
+    <!-- Card 3: Remaining -->
+    <div class="vip-card" style="padding: 14px; margin-bottom: 0;">
+      <div style="font-size: 0.725rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Remaining</div>
+      <div style="font-size: 1rem; font-weight: 800; color: {% if remaining_days < 2 %}#EF4444{% else %}#10B981{% endif %}; margin-top: 2px;">
+        {{ remaining_days }} Days
+      </div>
+    </div>
+
+    <!-- Card 4: Expires On -->
+    <div class="vip-card" style="padding: 14px; margin-bottom: 0;">
+      <div style="font-size: 0.725rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Expires On</div>
+      <div style="font-size: 0.85rem; font-weight: 700; color: #475569; margin-top: 2px;">{{ server.expires_at|format_date }}</div>
+    </div>
+
+  </div>
+
+  <!-- Renewal / Extension Modal -->
+  <div id="renew-modal" class="maintenance-overlay" style="display: none;">
+    <div class="maintenance-card" style="text-align: left; max-width: 480px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 1.25rem; font-weight: 800; color: #0F172A;">Extend Server Duration</h3>
+        <button onclick="document.getElementById('renew-modal').style.display='none'" style="background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #94A3B8;">&times;</button>
+      </div>
+
+      <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 16px;">
+        Current expiration: <strong>{{ server.expires_at }}</strong>. Your coins balance: <strong class="user-coin-val">{{ current_user.coins }}</strong>.
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+        {% for p in packages %}
+        <label style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--border-light); border-radius: 12px; cursor: pointer; transition: background 0.15s ease;" onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='#FFFFFF'">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <input type="radio" name="renew_package_id" value="{{ p.id }}" {% if loop.first %}checked{% endif %} style="accent-color: var(--primary-purple);">
+            <div>
+              <div style="font-weight: 700; color: #0F172A; font-size: 0.9rem;">+{{ p.days }} Days Extension</div>
+              <div style="font-size: 0.75rem; color: #64748B;">{{ p.name }}</div>
+            </div>
+          </div>
+          <div style="font-weight: 800; color: #7C3AED; font-size: 0.95rem;">
+            {{ p.coins }} Coins
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+
+      <button id="confirm-renew-btn" onclick="submitRenewal({{ server.id }})" class="btn-primary btn-block">
+        Confirm Extension &amp; Deduct Coins
+      </button>
+    </div>
+  </div>
+
+  <!-- Entry File Missing Warning Modal -->
+  <div id="no-entry-modal" class="maintenance-overlay" style="display: none; z-index: 100000; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(4px);">
+    <div class="maintenance-card" style="text-align: center; max-width: 440px; width: 90%; padding: 26px 22px; border-radius: var(--radius-lg); box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
+      <div style="width: 58px; height: 58px; border-radius: 50%; background: #FEF2F2; color: #EF4444; display: flex; align-items: center; justify-content: center; font-size: 1.7rem; margin: 0 auto 14px auto; border: 1px solid #FCA5A5; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.15);">
+        ⚠️
+      </div>
+
+      <h3 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin-bottom: 8px;">
+        Entry File Missing
+      </h3>
+      <p style="font-size: 0.85rem; color: #475569; margin-bottom: 20px; line-height: 1.4;">
+        Please upload your project files and main entry file before starting the server.
+      </p>
+
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button onclick="document.getElementById('no-entry-modal').style.display='none'" class="btn-secondary btn-sm" style="padding: 8px 16px; font-weight: 700;">
+          Close
+        </button>
+        <a href="{{ url_for('file_manager', server_id=server.id) }}" class="btn-primary btn-sm" style="padding: 8px 18px; font-weight: 800; text-decoration: none;">
+          📁 Upload Files Now
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Locked Expired Server Modal Overlay -->
+  {% include 'expired_modal.html' %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function showNoEntryModal() {
+    const modal = document.getElementById('no-entry-modal');
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function handleStartServerClick(serverId, hasEntryFile) {
+    if (!hasEntryFile) {
+      showNoEntryModal();
+      return;
+    }
+    executeServerAction(serverId, 'start');
+  }
+
+  // Initialize Live Terminal Streaming & Uptime Counter
+  document.addEventListener('DOMContentLoaded', () => {
+    startLiveLogs({{ server.id }}, '{{ server.status }}', {{ start_time or 0 }});
+  });
+
+  // Renewal Handler
+  async function submitRenewal(serverId) {
+    const selected = document.querySelector('input[name="renew_package_id"]:checked');
+    if (!selected) return;
+
+    const btn = document.getElementById('confirm-renew-btn');
+    btn.disabled = true;
+    btn.textContent = 'Extending...';
+
+    try {
+      const res = await fetch(`/api/servers/${serverId}/renew`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ package_id: selected.value })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message, 'success');
+        document.getElementById('renew-modal').style.display = 'none';
+        setTimeout(() => location.reload(), 1200);
+      } else {
+        showToast(data.message || 'Renewal failed.', 'danger');
+      }
+    } catch (err) {
+      showToast('Error extending server.', 'danger');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Confirm Extension & Deduct Coins';
+    }
+  }
+</script>
+{% endblock %}
