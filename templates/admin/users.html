@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}User Management — {{ site_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="container-mobile">
+
+  <!-- Admin Header -->
+  <div class="vip-card" style="padding: 20px 24px; margin-bottom: 16px; background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%); color: #FFFFFF; border: none;">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+      <div>
+        <a href="{{ url_for('admin_dashboard') }}" style="color: #A5B4FC; font-size: 0.8rem; font-weight: 700;">← Back to Admin Console</a>
+        <h1 style="font-size: 1.4rem; font-weight: 900; color: #FFFFFF; margin-top: 4px;">User Management & Admin Roles</h1>
+      </div>
+      <div style="font-size: 0.85rem; background: rgba(255,255,255,0.15); padding: 6px 14px; border-radius: 9999px;">
+        Total: <strong>{{ users|length }}</strong> Users
+      </div>
+    </div>
+  </div>
+
+  <!-- Search Bar -->
+  <div class="vip-card" style="padding: 16px 20px; margin-bottom: 16px;">
+    <form method="GET" action="{{ url_for('admin_users') }}" style="display: flex; gap: 10px;">
+      <input 
+        type="text" 
+        name="q" 
+        value="{{ search_query or '' }}" 
+        placeholder="🔍 Search users by username, email, or name..." 
+        class="form-control"
+        style="flex: 1;"
+      >
+      <button type="submit" class="btn-primary" style="padding: 10px 20px;">
+        Search
+      </button>
+      {% if search_query %}
+      <a href="{{ url_for('admin_users') }}" class="btn-secondary" style="padding: 10px 16px;">
+        Clear
+      </a>
+      {% endif %}
+    </form>
+  </div>
+
+  <!-- Users List Cards / Table -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    {% for u in users %}
+    {% set u_is_super = u.role == 'super_admin' or (u.is_super_admin is defined and u.is_super_admin) or u.email in ['admin@hostx.io', 'admin@hostx.vip', 'yeasingahmmed0011@gmail.com'] or u.username == 'admin' %}
+    {% set u_is_admin = u_is_super or u.role == 'admin' or (u.is_admin is defined and u.is_admin) %}
+
+    <div class="vip-card" style="padding: 18px 20px; border-color: {% if u.status == 'disabled' %}#FECACA{% elif u_is_super %}#FDE68A{% elif u_is_admin %}#C7D2FE{% else %}#E2E8F0{% endif %}; background: {% if u.status == 'disabled' %}#FFF5F5{% elif u_is_super %}#FFFDF5{% elif u_is_admin %}#F8FAFC{% else %}#FFFFFF{% endif %};">
+      
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px;">
+        
+        <!-- User Info -->
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 46px; height: 46px; border-radius: 50%; background: {% if u_is_super %}linear-gradient(135deg, #D97706 0%, #B45309 100%){% elif u_is_admin %}linear-gradient(135deg, #4F46E5 0%, #3730A3 100%){% else %}#F1F5F9{% endif %}; color: {% if u_is_admin %}#fff{% else %}#334155{% endif %}; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: 800; overflow: hidden; border: 2px solid {% if u_is_super %}#FDE68A{% elif u_is_admin %}#C7D2FE{% else %}#EDE9FE{% endif %}; flex-shrink: 0;">
+            {% if u.avatar_url %}
+            <img src="{{ u.avatar_url }}" alt="{{ u.full_name }}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+            {% elif u_is_super %}
+            👑
+            {% elif u_is_admin %}
+            🛡️
+            {% else %}
+            {{ u.username[0]|upper }}
+            {% endif %}
+          </div>
+          <div>
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+              <h3 style="font-size: 1.05rem; font-weight: 800; color: #0F172A; margin: 0;">{{ u.full_name }}</h3>
+              <span style="font-size: 0.725rem; font-weight: 700; background: {% if u.status == 'active' %}#ECFDF5{% else %}#FEF2F2{% endif %}; color: {% if u.status == 'active' %}#059669{% else %}#DC2626{% endif %}; padding: 2px 8px; border-radius: 9999px;">
+                {{ u.status|upper }}
+              </span>
+              {% if u_is_super %}
+              <span style="font-size: 0.7rem; font-weight: 800; background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; padding: 2px 8px; border-radius: 4px;">👑 SUPER ADMIN (OWNER)</span>
+              {% elif u_is_admin %}
+              <span style="font-size: 0.7rem; font-weight: 800; background: #EEF2FF; color: #4F46E5; border: 1px solid #C7D2FE; padding: 2px 8px; border-radius: 4px;">🛡️ SUB-ADMIN</span>
+              {% endif %}
+            </div>
+            <div style="font-size: 0.8rem; color: #64748B; margin-top: 2px;">
+              @{{ u.username }} • {{ u.email }} • Registered: {{ u.created_at|format_date }}
+            </div>
+            {% if u_is_admin and not u_is_super and u.admin_permissions %}
+            <div style="font-size: 0.725rem; color: #475569; margin-top: 4px; background: #F1F5F9; padding: 3px 8px; border-radius: 6px; display: inline-block;">
+              <strong>Permissions:</strong> {{ u.admin_permissions }}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Metrics & Actions -->
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+          
+          <div style="background: #FFFBEB; border: 1px solid #FDE68A; padding: 6px 12px; border-radius: 10px; font-size: 0.85rem; font-weight: 800; color: #B45309;">
+            🪙 {{ u.coins }} Coins
+          </div>
+
+          <div style="background: #F1F5F9; padding: 6px 12px; border-radius: 10px; font-size: 0.825rem; font-weight: 600; color: #475569;">
+            🖥️ {{ u.server_count }} Servers
+          </div>
+
+          <!-- Edit Profile Button -->
+          {% if is_super_admin or not u_is_super %}
+          <button type="button" class="btn-secondary btn-sm" style="font-weight: 700; border-color: #CBD5E1; color: #1E293B;" onclick="openEditModal({{ u.id }}, '{{ u.full_name|escape }}', '{{ u.username|escape }}', '{{ u.email|escape }}', '{{ (u.bio or '')|escape }}', {{ u.coins }}, '{{ u.role }}', '{{ u.status }}', '{{ (u.admin_permissions or '')|escape }}', {{ 'true' if u_is_super else 'false' }})">
+            ✏️ Edit User
+          </button>
+          {% endif %}
+
+          <!-- Open / Support Mode (Impersonation) -->
+          {% if u.id != current_user.id %}
+          <a href="{{ url_for('admin_impersonate', user_id=u.id) }}" class="btn-secondary btn-sm" style="font-weight: 700; border-color: #C4B5FD; color: #6D28D9;" title="Inspect account from user's perspective">
+            🛡️ Open (Support)
+          </a>
+
+          <!-- Toggle Status Form -->
+          {% if is_super_admin or not u_is_admin %}
+          <form action="{{ url_for('admin_toggle_user_status', user_id=u.id) }}" method="POST" style="display: inline;">
+            {% if u.status == 'active' %}
+            <button type="submit" class="btn-danger btn-sm" onclick="return confirm('Disable account for {{ u.username }}?')">
+              🔒 Disable
+            </button>
+            {% else %}
+            <button type="submit" class="btn-success btn-sm" onclick="return confirm('Re-activate account for {{ u.username }}?')">
+              🔓 Activate
+            </button>
+            {% endif %}
+          </form>
+          {% endif %}
+          {% endif %}
+
+        </div>
+
+      </div>
+
+    </div>
+    {% else %}
+    <div class="vip-card" style="text-align: center; padding: 36px; color: #94A3B8;">
+      No users matched your search criteria.
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+
+<!-- Admin Edit User Modal -->
+<div id="adminEditUserModal" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 16px; overflow-y: auto;">
+  <div class="vip-card" style="width: 100%; max-width: 580px; padding: 24px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); margin: auto; max-height: 90vh; overflow-y: auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
+      <div>
+        <h2 style="font-size: 1.2rem; font-weight: 900; color: #0F172A; margin: 0;">Admin: Edit User Account</h2>
+        <p style="font-size: 0.775rem; color: #64748B; margin-top: 2px;">Manage details, coin balance, account role and permissions</p>
+      </div>
+      <button type="button" onclick="closeEditModal()" style="background: none; border: none; font-size: 1.25rem; color: #64748B; cursor: pointer; padding: 4px 8px; border-radius: 6px;">✕</button>
+    </div>
+
+    <form id="adminEditUserForm" method="POST" action="">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group" style="grid-column: span 2;">
+          <label class="form-label" for="edit_full_name">Full Name</label>
+          <input type="text" id="edit_full_name" name="full_name" class="form-control" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="edit_username">Username</label>
+          <input type="text" id="edit_username" name="username" class="form-control" minlength="3" required>
+          <span style="font-size: 0.7rem; color: #64748B; margin-top: 2px; display: block;">Must be unique across system</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="edit_email">Gmail Address</label>
+          <input type="email" id="edit_email" name="email" class="form-control" placeholder="user@gmail.com" required>
+          <span style="font-size: 0.7rem; color: #64748B; margin-top: 2px; display: block;">Must end with @gmail.com</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="edit_coins">Coin Balance</label>
+          <input type="number" id="edit_coins" name="coins" class="form-control" min="0" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="edit_role">Account Role</label>
+          {% if is_super_admin %}
+          <select id="edit_role" name="role" class="form-control" onchange="togglePermissionsBlock(this.value)">
+            <option value="user">Standard User</option>
+            <option value="admin">Sub-Admin (Custom Access)</option>
+            <option value="super_admin">Super Admin (Main Owner)</option>
+          </select>
+          {% else %}
+          <select id="edit_role" name="role" class="form-control" disabled>
+            <option value="user">Standard User</option>
+            <option value="admin">Sub-Admin</option>
+            <option value="super_admin">Super Admin</option>
+          </select>
+          <span style="font-size: 0.7rem; color: #DC2626; margin-top: 2px; display: block;">Only Super Admin can change account roles</span>
+          {% endif %}
+        </div>
+
+        <!-- Granular Permissions Checklist for Sub-Admin (Only configurable by Super Admin) -->
+        {% if is_super_admin %}
+        <div id="permissionsBlock" class="form-group" style="grid-column: span 2; display: none; background: #F8FAFC; padding: 14px; border-radius: 10px; border: 1px solid #CBD5E1;">
+          <label class="form-label" style="color: #1E293B; font-weight: 800; margin-bottom: 6px; display: block;">
+            🛡️ Sub-Admin Granular Permissions Checklist
+          </label>
+          <p style="font-size: 0.75rem; color: #64748B; margin-bottom: 10px;">Select specific admin console sections this sub-admin is authorized to manage:</p>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <label style="font-size: 0.825rem; display: flex; align-items: center; gap: 8px; font-weight: 600; color: #334155; cursor: pointer;">
+              <input type="checkbox" name="permissions" value="manage_users" id="perm_manage_users">
+              👥 Manage Users
+            </label>
+
+            <label style="font-size: 0.825rem; display: flex; align-items: center; gap: 8px; font-weight: 600; color: #334155; cursor: pointer;">
+              <input type="checkbox" name="permissions" value="manage_coins" id="perm_manage_coins">
+              🪙 Manage Coins
+            </label>
+
+            <label style="font-size: 0.825rem; display: flex; align-items: center; gap: 8px; font-weight: 600; color: #334155; cursor: pointer;">
+              <input type="checkbox" name="permissions" value="manage_files" id="perm_manage_files">
+              📁 Manage Files
+            </label>
+
+            <label style="font-size: 0.825rem; display: flex; align-items: center; gap: 8px; font-weight: 600; color: #334155; cursor: pointer;">
+              <input type="checkbox" name="permissions" value="manage_settings" id="perm_manage_settings">
+              ⚙️ Manage Settings
+            </label>
+
+            <label style="font-size: 0.825rem; display: flex; align-items: center; gap: 8px; font-weight: 600; color: #334155; cursor: pointer;">
+              <input type="checkbox" name="permissions" value="manage_announcements" id="perm_manage_announcements">
+              📢 Announcements
+            </label>
+
+            <label style="font-size: 0.825rem; display: flex; align-items: center; gap: 8px; font-weight: 600; color: #334155; cursor: pointer;">
+              <input type="checkbox" name="permissions" value="manage_broadcasts" id="perm_manage_broadcasts">
+              ⚡ Broadcast Sender
+            </label>
+
+            <label style="font-size: 0.825rem; display: flex; align-items: center; gap: 8px; font-weight: 600; color: #334155; cursor: pointer; grid-column: span 2;">
+              <input type="checkbox" name="permissions" value="view_logs" id="perm_view_logs">
+              📜 View Audit Logs
+            </label>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="form-group" style="grid-column: span 2;">
+          <label class="form-label" for="edit_status">Account Status</label>
+          <select id="edit_status" name="status" class="form-control">
+            <option value="active">Active (Normal Access)</option>
+            <option value="disabled">Disabled (Suspended)</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="grid-column: span 2;">
+          <label class="form-label" for="edit_bio">Bio / Notes</label>
+          <input type="text" id="edit_bio" name="bio" class="form-control" placeholder="User bio or administrative notes">
+        </div>
+
+        <div class="form-group" style="grid-column: span 2; background: #F8FAFC; padding: 12px; border-radius: 8px; border: 1px dashed #CBD5E1;">
+          <label class="form-label" for="edit_password" style="color: #475569;">Admin Password Reset (Optional)</label>
+          <input type="password" id="edit_password" name="new_password" class="form-control" placeholder="Leave blank to keep existing password" minlength="6" autocomplete="new-password">
+          <span style="font-size: 0.7rem; color: #94A3B8; margin-top: 2px; display: block;">Only fill this if you want to override the user's login password.</span>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; border-top: 1px solid #E2E8F0; padding-top: 14px;">
+        <button type="button" onclick="closeEditModal()" class="btn-secondary" style="padding: 9px 18px; font-weight: 700;">
+          Cancel
+        </button>
+        <button type="submit" class="btn-primary" style="padding: 9px 22px; font-weight: 700;">
+          Save Changes
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openEditModal(userId, fullName, username, email, bio, coins, role, status, permissionsStr, isSuper) {
+  const modal = document.getElementById('adminEditUserModal');
+  const form = document.getElementById('adminEditUserForm');
+  
+  form.action = '/admin/users/' + userId + '/update';
+  document.getElementById('edit_full_name').value = fullName;
+  document.getElementById('edit_username').value = username;
+  document.getElementById('edit_email').value = email;
+  document.getElementById('edit_bio').value = bio || '';
+  document.getElementById('edit_coins').value = coins;
+  
+  const roleSelect = document.getElementById('edit_role');
+  if (roleSelect) {
+    if (isSuper) {
+      roleSelect.value = 'super_admin';
+    } else {
+      roleSelect.value = role;
+    }
+    togglePermissionsBlock(roleSelect.value);
+  }
+
+  document.getElementById('edit_status').value = status;
+  document.getElementById('edit_password').value = '';
+
+  // Check permissions checkboxes
+  const perms = permissionsStr ? permissionsStr.split(',') : ['manage_users','manage_coins','manage_files','manage_settings','manage_announcements','manage_broadcasts','view_logs'];
+  ['manage_users','manage_coins','manage_files','manage_settings','manage_announcements','manage_broadcasts','view_logs'].forEach(p => {
+    const el = document.getElementById('perm_' + p);
+    if (el) {
+      el.checked = perms.includes(p) || perms.includes('all');
+    }
+  });
+
+  modal.style.display = 'flex';
+}
+
+function togglePermissionsBlock(roleVal) {
+  const block = document.getElementById('permissionsBlock');
+  if (block) {
+    if (roleVal === 'admin') {
+      block.style.display = 'block';
+    } else {
+      block.style.display = 'none';
+    }
+  }
+}
+
+function closeEditModal() {
+  document.getElementById('adminEditUserModal').style.display = 'none';
+}
+
+window.addEventListener('click', function(event) {
+  const modal = document.getElementById('adminEditUserModal');
+  if (event.target === modal) {
+    closeEditModal();
+  }
+});
+</script>
+{% endblock %}

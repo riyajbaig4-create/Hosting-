@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Broadcast Notifications — {{ site_name }} Admin{% endblock %}
+
+{% block content %}
+<style>
+  .broadcast-grid {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .broadcast-grid > * {
+    flex: 1;
+    min-width: 0;
+  }
+  .form-row-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .form-control,
+  input[type="text"],
+  select,
+  textarea {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .target-box {
+    border: 2px solid #E2E8F0;
+    padding: 12px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #F8FAFC;
+    transition: all 0.2s ease;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  
+  @media (max-width: 640px) {
+    .broadcast-grid {
+      flex-direction: column !important;
+    }
+    .form-row-grid {
+      grid-template-columns: 1fr !important;
+      gap: 12px !important;
+    }
+    .broadcast-form-card {
+      padding: 16px !important;
+    }
+    .target-box {
+      flex-direction: row;
+      align-items: flex-start !important;
+      padding: 12px !important;
+    }
+    .form-control,
+    input[type="text"],
+    select,
+    textarea {
+      font-size: 0.9rem !important;
+      padding: 10px 12px !important;
+    }
+    .form-label {
+      font-size: 0.85rem !important;
+    }
+    .btn-submit-container {
+      display: block !important;
+    }
+    .btn-submit-container button {
+      width: 100% !important;
+      padding: 14px !important;
+      font-size: 0.9rem !important;
+    }
+    .vip-card h2 {
+      font-size: 1rem !important;
+    }
+  }
+</style>
+
+<div class="container-mobile">
+
+  <!-- Admin Header -->
+  <div class="vip-card" style="padding: 20px 24px; margin-bottom: 20px; background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%); color: #FFFFFF; border: none;">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+      <div>
+        <a href="{{ url_for('admin_dashboard') }}" style="color: #A5B4FC; font-size: 0.8rem; font-weight: 700;">← Back to Admin Console</a>
+        <h1 style="font-size: 1.4rem; font-weight: 900; color: #FFFFFF; margin-top: 4px;">⚡ Notification Broadcast Center</h1>
+        <p style="font-size: 0.8rem; color: #C7D2FE; margin-top: 2px;">Send in-app notifications directly to all users or specific user accounts instantly.</p>
+      </div>
+      <div style="font-size: 0.85rem; background: rgba(255,255,255,0.15); padding: 6px 14px; border-radius: 9999px; font-weight: 700;">
+        Active Recipients: <strong>{{ users|length }}</strong>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr; gap: 20px;">
+    
+    <!-- Broadcast Form Card -->
+    <div class="vip-card broadcast-form-card" style="padding: 24px; background: #FFFFFF; border-radius: 16px;">
+      <h2 style="font-size: 1.15rem; font-weight: 900; color: #0F172A; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;">
+        📢 Create Notification Broadcast
+      </h2>
+
+      <form method="POST" action="{{ url_for('admin_broadcast') }}">
+        
+        <!-- Target Type Selector -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="form-label" style="font-weight: 800; color: #1E293B; margin-bottom: 8px; display: block;">Select Target Audience</label>
+          <div class="broadcast-grid">
+            <label class="target-box" id="targetAllBox">
+              <input type="radio" name="target_type" value="all" checked onchange="handleTargetChange('all')" style="width: 18px; height: 18px; accent-color: #4F46E5; flex-shrink: 0; margin-top: 2px;">
+              <div>
+                <strong style="font-size: 0.9rem; color: #0F172A; display: block;">🌐 All Active Users</strong>
+                <span style="font-size: 0.75rem; color: #64748B;">Send broadcast to all {{ users|length }} active user wallets</span>
+              </div>
+            </label>
+
+            <label class="target-box" id="targetSpecificBox">
+              <input type="radio" name="target_type" value="specific" onchange="handleTargetChange('specific')" style="width: 18px; height: 18px; accent-color: #4F46E5; flex-shrink: 0; margin-top: 2px;">
+              <div>
+                <strong style="font-size: 0.9rem; color: #0F172A; display: block;">👤 Specific User Account</strong>
+                <span style="font-size: 0.75rem; color: #64748B;">Direct notice to a single user</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Specific User Select Dropdown -->
+        <div id="specificUserContainer" class="form-group" style="display: none; margin-bottom: 16px; background: #EEF2FF; padding: 14px; border-radius: 10px; border: 1px solid #C7D2FE; box-sizing: border-box; width: 100%;">
+          <label class="form-label" for="target_user_id" style="font-weight: 800; color: #3730A3;">Select Target User</label>
+          <select name="target_user_id" id="target_user_id" class="form-control" style="border-color: #A5B4FC;">
+            <option value="">-- Choose User Account --</option>
+            {% for u in users %}
+            <option value="{{ u.id }}">{{ u.full_name }} (@{{ u.username }}) — {{ u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-row-grid">
+          <!-- Notification Title -->
+          <div class="form-group">
+            <label class="form-label" for="title" style="font-weight: 800; color: #1E293B;">Notification Title</label>
+            <input type="text" id="title" name="title" class="form-control" placeholder="e.g. System Update Notice" required>
+          </div>
+
+          <!-- Category -->
+          <div class="form-group">
+            <label class="form-label" for="category" style="font-weight: 800; color: #1E293B;">Category Badge</label>
+            <select id="category" name="category" class="form-control">
+              <option value="announcement">📢 Announcement</option>
+              <option value="system">⚙️ System Update</option>
+              <option value="warning">⚠️ Warning / Notice</option>
+              <option value="info">ℹ️ General Information</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Message Body -->
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label class="form-label" for="message" style="font-weight: 800; color: #1E293B;">Notification Message</label>
+          <textarea id="message" name="message" class="form-control" rows="4" placeholder="Type notification contents here... Users will instantly see this notification in their bell inbox dropdown!" required></textarea>
+        </div>
+
+        <div class="btn-submit-container" style="display: flex; justify-content: flex-end;">
+          <button type="submit" class="btn-primary" style="padding: 12px 28px; font-weight: 800; font-size: 0.95rem; border-radius: 10px;">
+            🚀 Send Notification Now
+          </button>
+        </div>
+
+      </form>
+    </div>
+
+    <!-- Broadcast Audit Log Table -->
+    <div class="vip-card" style="padding: 24px; background: #FFFFFF; border-radius: 16px;">
+      <h2 style="font-size: 1.15rem; font-weight: 900; color: #0F172A; margin: 0 0 16px 0; display: flex; align-items: center; justify-content: space-between;">
+        <span>📜 Broadcast Log History</span>
+        <span style="font-size: 0.75rem; color: #64748B; font-weight: 600;">Last 30 broadcasts</span>
+      </h2>
+
+      {% if broadcasts %}
+      <div style="overflow-x: auto;">
+        <table class="table" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: #F8FAFC; border-bottom: 2px solid #E2E8F0; text-align: left; font-size: 0.8rem; color: #64748B;">
+              <th style="padding: 10px 12px;">ID</th>
+              <th style="padding: 10px 12px;">Admin Sender</th>
+              <th style="padding: 10px 12px;">Target</th>
+              <th style="padding: 10px 12px;">Category</th>
+              <th style="padding: 10px 12px;">Title & Message</th>
+              <th style="padding: 10px 12px;">Sent At</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in broadcasts %}
+            <tr style="border-bottom: 1px solid #F1F5F9; font-size: 0.85rem;">
+              <td style="padding: 12px; font-weight: 700; color: #64748B;">#{{ b.id }}</td>
+              <td style="padding: 12px; font-weight: 700; color: #4F46E5;">@{{ b.admin_username }}</td>
+              <td style="padding: 12px;">
+                {% if b.target_type == 'all' %}
+                <span style="background: #EEF2FF; color: #4F46E5; padding: 2px 8px; border-radius: 9999px; font-weight: 700; font-size: 0.75rem;">
+                  🌐 All ({{ b.recipients_count }})
+                </span>
+                {% else %}
+                <span style="background: #F0FDF4; color: #166534; padding: 2px 8px; border-radius: 9999px; font-weight: 700; font-size: 0.75rem;">
+                  👤 @{{ b.target_username }}
+                </span>
+                {% endif %}
+              </td>
+              <td style="padding: 12px;">
+                <span style="font-size: 0.75rem; font-weight: 700; background: #F1F5F9; padding: 2px 8px; border-radius: 4px; text-transform: capitalize;">
+                  {{ b.category }}
+                </span>
+              </td>
+              <td style="padding: 12px;">
+                <strong style="color: #0F172A; display: block;">{{ b.title }}</strong>
+                <span style="color: #64748B; font-size: 0.8rem; display: block; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                  {{ b.message }}
+                </span>
+              </td>
+              <td style="padding: 12px; color: #94A3B8; font-size: 0.775rem;">
+                {{ b.created_at|format_datetime }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="text-align: center; padding: 30px; color: #94A3B8; font-size: 0.875rem;">
+        No broadcast history logged yet.
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+function handleTargetChange(type) {
+  const container = document.getElementById('specificUserContainer');
+  const allBox = document.getElementById('targetAllBox');
+  const specificBox = document.getElementById('targetSpecificBox');
+  
+  if (type === 'specific') {
+    container.style.display = 'block';
+    specificBox.style.borderColor = '#4F46E5';
+    specificBox.style.background = '#EEF2FF';
+    allBox.style.borderColor = '#E2E8F0';
+    allBox.style.background = '#F8FAFC';
+  } else {
+    container.style.display = 'none';
+    allBox.style.borderColor = '#4F46E5';
+    allBox.style.background = '#EEF2FF';
+    specificBox.style.borderColor = '#E2E8F0';
+    specificBox.style.background = '#F8FAFC';
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,582 @@
+{% extends "base.html" %}
+
+{% block title %}System Settings — {{ site_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="container-mobile" style="max-width: 680px;">
+
+  <!-- Admin Header -->
+  <div class="vip-card" style="padding: 20px 24px; margin-bottom: 16px; background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%); color: #FFFFFF; border: none;">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+      <div>
+        <a href="{{ url_for('admin_dashboard') }}" style="color: #A5B4FC; font-size: 0.8rem; font-weight: 700;">← Back to Admin Console</a>
+        <h1 style="font-size: 1.4rem; font-weight: 900; color: #FFFFFF; margin-top: 4px;">Platform System Settings</h1>
+      </div>
+      <div style="font-size: 0.85rem; background: rgba(255,255,255,0.15); padding: 6px 14px; border-radius: 9999px;">
+        ⚙️ Configuration
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. Website Logo & Global Branding Card -->
+  <div class="vip-card" style="padding: 24px; margin-bottom: 16px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; flex-wrap: wrap; gap: 10px;">
+      <h2 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0; display: flex; align-items: center; gap: 8px;">
+        <span>🎨</span>
+        <span>Website Logo &amp; Global Branding</span>
+      </h2>
+      {% if settings.site_logo_url and settings.site_logo_url != '/static/img/logo.svg' %}
+      <span style="font-size: 0.75rem; font-weight: 700; background: #EEF2FF; color: #4F46E5; padding: 3px 10px; border-radius: 9999px; border: 1px solid #C7D2FE;">
+        ✓ Custom Logo Active
+      </span>
+      {% else %}
+      <span style="font-size: 0.75rem; font-weight: 700; background: #F1F5F9; color: #64748B; padding: 3px 10px; border-radius: 9999px; border: 1px solid #E2E8F0;">
+        Default Logo Active
+      </span>
+      {% endif %}
+    </div>
+    <p style="font-size: 0.825rem; color: #64748B; margin-bottom: 18px;">
+      Upload a custom brand logo directly from your device. Changing the logo here automatically and instantly updates the top navbar icon, browser favicon, login/signup portals, home hero banner, and mobile header across all user sessions.
+    </p>
+
+    <!-- Logo Preview & Upload Box -->
+    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; padding: 18px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
+        
+        <!-- Live Preview Showcase -->
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+          <div style="width: 68px; height: 68px; border-radius: 14px; background: #FFFFFF; border: 2px solid #EDE9FE; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.12); display: flex; align-items: center; justify-content: center; padding: 8px; overflow: hidden;">
+            <img id="admin_logo_preview" src="{{ settings.site_logo_url or site_logo_url }}" alt="{{ site_name }} Logo" style="max-width: 100%; max-height: 100%; object-fit: contain;" onerror="this.onerror=null;this.src='/static/img/logo.svg';">
+          </div>
+          <span style="font-size: 0.7rem; color: #64748B; font-weight: 600;">Active Logo</span>
+        </div>
+
+        <!-- Navbar Header Simulation Preview -->
+        <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 14px; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px;">
+          <span style="font-size: 0.7rem; color: #64748B; font-weight: 600;">Navbar Live Simulation:</span>
+          <div style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 1.1rem; color: #0F172A;">
+            <div style="width: 34px; height: 34px; border-radius: 10px; background: #F8FAFC; border: 1px solid #E2E8F0; display: flex; align-items: center; justify-content: center; padding: 4px; overflow: hidden;">
+              <img id="admin_logo_nav_preview" src="{{ settings.site_logo_url or site_logo_url }}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.onerror=null;this.src='/static/img/logo.svg';">
+            </div>
+            <span>{{ settings.site_name or site_name }}</span>
+          </div>
+        </div>
+
+        <!-- Upload Form Controls -->
+        <div style="flex: 1; min-width: 220px;">
+          <form action="{{ url_for('admin_settings') }}" method="POST" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 10px;">
+            <input type="hidden" name="action" value="upload_logo">
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+              <label class="btn-secondary" style="padding: 8px 16px; font-size: 0.85rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin: 0;">
+                <span>📁 Choose Logo Image</span>
+                <input type="file" id="admin_logo_file_input" name="logo" accept="image/png, image/jpeg, image/jpg, image/webp, image/gif, image/svg+xml, image/x-icon" style="display: none;" onchange="handleLogoPreview(this)" required>
+              </label>
+
+              <button type="submit" id="admin_logo_submit_btn" class="btn-primary" style="padding: 8px 18px; font-size: 0.85rem; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                <span>⬆️ Upload &amp; Update Globally</span>
+              </button>
+            </div>
+
+            <div id="admin_logo_filename" style="font-size: 0.775rem; color: #64748B; font-weight: 600; min-height: 16px;">
+              Supported formats: PNG, JPG, JPEG, WEBP, GIF, SVG, ICO (Max 5MB)
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Restore Default Logo Option -->
+    {% if settings.site_logo_url and settings.site_logo_url != '/static/img/logo.svg' %}
+    <form action="{{ url_for('admin_settings') }}" method="POST" onsubmit="return confirm('Restore the default system logo across all pages?');" style="margin-top: 10px;">
+      <input type="hidden" name="action" value="reset_logo">
+      <button type="submit" style="background: none; border: 1px solid #FECACA; color: #DC2626; padding: 6px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: background 0.15s ease;">
+        🗑️ Restore Default System Logo
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  <!-- Site Branding & Naming Settings -->
+  <div class="vip-card" style="padding: 24px; margin-bottom: 16px;">
+    <h2 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin-bottom: 4px;">
+      🏷️ Site Branding &amp; Naming Configuration
+    </h2>
+    <p style="font-size: 0.825rem; color: #64748B; margin-bottom: 20px;">
+      Change the site brand names dynamically across all pages, headers, footers, titles, and system notifications without restart.
+    </p>
+
+    <form action="{{ url_for('admin_settings') }}" method="POST">
+      <input type="hidden" name="action" value="update_branding">
+
+      <div class="form-group">
+        <label class="form-label" for="site_name">Standard Site Name</label>
+        <input 
+          type="text" 
+          id="site_name" 
+          name="site_name" 
+          class="form-control" 
+          value="{{ settings.site_name if settings and settings.site_name else site_name }}" 
+          placeholder="e.g. HostX" 
+          required
+        >
+        <div style="font-size: 0.775rem; color: #64748B; margin-top: 4px;">
+          Primary brand name displayed in headers, footers, navigation, logs, and emails.
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="vip_site_name">VIP / Full Brand Name</label>
+        <input 
+          type="text" 
+          id="vip_site_name" 
+          name="vip_site_name" 
+          class="form-control" 
+          value="{{ settings.vip_site_name if settings and settings.vip_site_name else vip_site_name }}" 
+          placeholder="e.g. HostX VIP" 
+          required
+        >
+        <div style="font-size: 0.775rem; color: #64748B; margin-top: 4px;">
+          Full platform branding displayed in hero headers, page title tags, and welcome cards.
+        </div>
+      </div>
+
+      <button type="submit" class="btn-primary" style="padding: 10px 24px;">
+        💾 Save Branding Configuration
+      </button>
+    </form>
+  </div>
+
+  <!-- New User Signup Bonus Coin & Daily Rewards Control -->
+  <div class="vip-card" style="padding: 24px; margin-bottom: 16px; border: 1.5px solid #DDD6FE; background: linear-gradient(180deg, #FAF5FF 0%, #FFFFFF 100%);">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 4px;">
+      <h2 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0; display: flex; align-items: center; gap: 8px;">
+        <span>🎁</span>
+        <span>New User Signup Bonus &amp; Daily Reward Control</span>
+      </h2>
+      <span style="font-size: 0.75rem; font-weight: 800; color: #7C3AED; background: #EDE9FE; padding: 4px 10px; border-radius: 9999px;">
+        Live Dynamic Economy
+      </span>
+    </div>
+    <p style="font-size: 0.825rem; color: #64748B; margin-bottom: 18px;">
+      Configure the automatic starting coin balance granted to new accounts upon registration. Set to <strong>0</strong> to disable the signup bonus entirely, or set any custom amount (e.g. 50, 100, 200).
+    </p>
+
+    <form action="{{ url_for('admin_settings') }}" method="POST">
+      <input type="hidden" name="action" value="update_signup_bonus">
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 16px;">
+        
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="default_starting_coins" style="font-weight: 700; color: #0F172A;">
+            🪙 New User Signup Bonus (Coins)
+          </label>
+          <div style="position: relative;">
+            <input 
+              type="number" 
+              id="default_starting_coins" 
+              name="default_starting_coins" 
+              class="form-control" 
+              value="{{ settings.default_starting_coins if settings and settings.default_starting_coins is not none else '50' }}" 
+              min="0" 
+              max="100000" 
+              step="1"
+              required
+              style="padding-left: 36px; font-weight: 800; font-size: 1.05rem;"
+            >
+            <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 1.1rem; pointer-events: none;">🪙</span>
+          </div>
+          <div style="font-size: 0.75rem; color: #64748B; margin-top: 4px;">
+            Default is <strong>50 coins</strong>. Set to <strong>0</strong> to disable free welcome coins for new registrations.
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="daily_reward_coins" style="font-weight: 700; color: #0F172A;">
+            ⭐ Daily Claim Reward (Coins per 24h)
+          </label>
+          <div style="position: relative;">
+            <input 
+              type="number" 
+              id="daily_reward_coins" 
+              name="daily_reward_coins" 
+              class="form-control" 
+              value="{{ settings.daily_reward_coins if settings and settings.daily_reward_coins is not none else '10' }}" 
+              min="0" 
+              max="10000" 
+              step="1"
+              required
+              style="padding-left: 36px; font-weight: 800; font-size: 1.05rem;"
+            >
+            <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 1.1rem; pointer-events: none;">⭐</span>
+          </div>
+          <div style="font-size: 0.75rem; color: #64748B; margin-top: 4px;">
+            Default is <strong>10 coins</strong> claimed every 24 hours from the user dashboard.
+          </div>
+        </div>
+
+      </div>
+
+      <button type="submit" class="btn-primary" style="padding: 10px 24px; background: var(--primary-grad);">
+        💾 Save Coin Economy Settings
+      </button>
+    </form>
+  </div>
+
+  <!-- Maintenance Mode Settings -->
+  <div class="vip-card" style="padding: 24px; margin-bottom: 16px;">
+    <h2 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin-bottom: 4px;">
+      Maintenance Mode Control
+    </h2>
+    <p style="font-size: 0.825rem; color: #64748B; margin-bottom: 20px;">
+      When enabled, regular users will be greeted with the maintenance overlay while administrators can continue operations.
+    </p>
+
+    <form action="{{ url_for('admin_settings') }}" method="POST">
+      <input type="hidden" name="action" value="update_maintenance">
+
+      <div class="form-group" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 14px;">
+        <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div>
+            <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem;">Enable Maintenance Mode</div>
+            <div style="font-size: 0.775rem; color: #64748B; margin-top: 2px;">
+              Shows the "New Update" maintenance screen to non-admin visitors.
+            </div>
+          </div>
+          <input 
+            type="checkbox" 
+            name="maintenance_mode" 
+            value="true" 
+            {% if maintenance_mode %}checked{% endif %}
+            style="accent-color: var(--primary-purple); width: 22px; height: 22px; cursor: pointer;"
+          >
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="maintenance_message">Maintenance Announcement Message</label>
+        <textarea 
+          id="maintenance_message" 
+          name="maintenance_message" 
+          class="form-control" 
+          rows="3" 
+          style="font-size: 0.9rem;"
+        >{{ maintenance_message }}</textarea>
+      </div>
+
+      <button type="submit" class="btn-primary" style="padding: 10px 24px;">
+        Save Maintenance Settings
+      </button>
+    </form>
+  </div>
+
+  <!-- 24/7 Python Self-Ping Engine (Preventing Sleep Mode) -->
+  <div class="vip-card" style="padding: 24px; margin-bottom: 16px; border: 1px solid #BAE6FD; background: linear-gradient(180deg, #F0F9FF 0%, #FFFFFF 100%);">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 4px;">
+      <h2 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0; display: flex; align-items: center; gap: 8px;">
+        <span>🔄</span>
+        <span>Python Background Self-Ping Engine (Prevent Sleep Mode)</span>
+      </h2>
+      <span style="font-size: 0.75rem; font-weight: 800; color: #0284C7; background: #E0F2FE; padding: 4px 10px; border-radius: 9999px;">
+        Anti-Sleep 24/7
+      </span>
+    </div>
+    <p style="font-size: 0.825rem; color: #64748B; margin-bottom: 18px;">
+      Render's free tier automatically goes to sleep after 15 minutes of inactivity. Our background Python Self-Ping Engine resolves this by continuously sending light HTTP requests to the system, simulating standard visitor activity and keeping your web server active 24/7.
+    </p>
+
+    <form action="{{ url_for('admin_settings') }}" method="POST">
+      <input type="hidden" name="action" value="update_self_ping">
+
+      <!-- Dynamic Auto-Detected URL Badge -->
+      <div class="form-group" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+        <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+          <span style="display: inline-block; width: 10px; height: 10px; background-color: #22C55E; border-radius: 50%; box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);"></span>
+          <span>Auto-Detected Web URL:</span>
+        </div>
+        <div style="font-family: monospace; font-size: 0.875rem; color: #0F172A; font-weight: 700; background: #F1F5F9; padding: 8px 12px; border-radius: 6px; margin-top: 6px; border: 1px dashed #CBD5E1; word-break: break-all;">
+          {% if settings.detected_site_url %}
+            {{ settings.detected_site_url }}
+          {% else %}
+            <span style="color: #94A3B8; font-weight: normal; font-style: italic;">Awaiting visitor traffic to auto-detect current URL</span>
+          {% endif %}
+        </div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 6px;">
+          The Python backend automatically senses the live running domain (such as Render's <code>.onrender.com</code> URL or a custom domain) upon any page access. It keeps itself alive without requiring manual configuration.
+        </div>
+      </div>
+
+      <!-- Backup / Manual Custom Override URL -->
+      <div class="form-group" style="margin-bottom: 16px;">
+        <label class="form-label" for="manual_ping_url" style="font-weight: 700; color: #0F172A;">
+          🔗 Backup / Manual Override URL (Optional)
+        </label>
+        <div style="position: relative;">
+          <input 
+            type="url" 
+            id="manual_ping_url" 
+            name="manual_ping_url" 
+            class="form-control" 
+            placeholder="https://your-custom-domain.onrender.com"
+            value="{{ settings.manual_ping_url or '' }}" 
+            style="padding-left: 36px; font-size: 0.95rem;"
+          >
+          <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 1.1rem; pointer-events: none;">🔗</span>
+        </div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 4px;">
+          If you want the background service to target a different custom domain or want to force a specific fallback address, specify it here.
+        </div>
+      </div>
+
+      <div class="form-group" style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+        <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; margin: 0;">
+          <div>
+            <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem;">Enable Self-Ping Service</div>
+            <div style="font-size: 0.775rem; color: #64748B; margin-top: 2px;">
+              Keep the site alive using the internal Python cron service.
+            </div>
+          </div>
+          <input 
+            type="checkbox" 
+            name="self_ping_enabled" 
+            value="true" 
+            {% if settings.self_ping_enabled == '1' %}checked{% endif %}
+            style="accent-color: #0284C7; width: 22px; height: 22px; cursor: pointer;"
+          >
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="self_ping_interval" style="font-weight: 700; color: #0F172A;">
+          ⏱️ Ping Interval (Minutes)
+        </label>
+        <div style="position: relative;">
+          <input 
+            type="number" 
+            id="self_ping_interval" 
+            name="self_ping_interval" 
+            class="form-control" 
+            value="{{ settings.self_ping_interval or '5' }}" 
+            min="1" 
+            max="60" 
+            step="1"
+            required
+            style="padding-left: 36px; font-weight: 800; font-size: 1.05rem;"
+          >
+          <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 1.1rem; pointer-events: none;">⏱️</span>
+        </div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 4px;">
+          Define how often the background service sends light HTTP requests to the server (recommended: <strong>4</strong> to <strong>5 minutes</strong>).
+        </div>
+      </div>
+
+      <button type="submit" class="btn-primary" style="padding: 10px 24px; background: #0284C7; border: none;">
+        💾 Save Self-Ping Settings
+      </button>
+    </form>
+  </div>
+
+  <!-- Server Package Pricing & Duration Management -->
+  <div class="vip-card" style="padding: 24px; margin-bottom: 16px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex-wrap: wrap; gap: 10px;">
+      <h2 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 0; display: flex; align-items: center; gap: 8px;">
+        <span>📦</span>
+        <span>Active Package Durations &amp; Coin Prices</span>
+      </h2>
+      
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <button type="button" onclick="toggleNewPackageForm()" class="btn-secondary" style="padding: 6px 14px; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+          <span>➕ Add New Tier</span>
+        </button>
+
+        <form action="{{ url_for('admin_reset_packages') }}" method="POST" onsubmit="return confirm('Reset all hosting packages to the 6 default standard tiers (5, 7, 15, 30, 60, 90 Days)?');" style="margin: 0;">
+          <button type="submit" style="background: #F1F5F9; border: 1px solid #CBD5E1; color: #475569; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.15s ease;" onmouseover="this.style.background='#E2E8F0'" onmouseout="this.style.background='#F1F5F9'">
+            🔄 Reset Defaults
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <p style="font-size: 0.825rem; color: #64748B; margin-bottom: 20px;">
+      Directly configure package durations in days, required coin prices, descriptions, and trial rules. All changes dynamically and instantly synchronize across the server creation dropdowns, pricing cards, renewal modals, and wallet coin deductions.
+    </p>
+
+    <!-- New Package Collapsible Creation Form -->
+    <div id="new_package_box" style="display: none; background: #FAF5FF; border: 1.5px dashed #C084FC; border-radius: 14px; padding: 18px; margin-bottom: 20px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <h3 style="font-size: 0.95rem; font-weight: 800; color: #6B21A8; margin: 0;">➕ Create New Hosting Package</h3>
+        <button type="button" onclick="toggleNewPackageForm()" style="background: none; border: none; font-size: 1.1rem; color: #6B21A8; cursor: pointer; font-weight: 800;">✕</button>
+      </div>
+
+      <form action="{{ url_for('admin_create_package') }}" method="POST">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label class="form-label" style="font-size: 0.775rem;">Package Name</label>
+            <input type="text" name="name" class="form-control" placeholder="e.g. Standard 180 Days" required style="background: #FFFFFF;">
+          </div>
+          <div>
+            <label class="form-label" style="font-size: 0.775rem;">Duration (Days)</label>
+            <input type="number" name="days" class="form-control" placeholder="e.g. 180" min="1" required style="background: #FFFFFF;">
+          </div>
+          <div>
+            <label class="form-label" style="font-size: 0.775rem;">Coin Price (🪙)</label>
+            <input type="number" name="coins" class="form-control" placeholder="e.g. 250" min="0" required style="background: #FFFFFF;">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label class="form-label" style="font-size: 0.775rem;">Package Description</label>
+          <input type="text" name="description" class="form-control" placeholder="e.g. Semi-annual priority hosting package" style="background: #FFFFFF;">
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+          <div style="display: flex; gap: 16px; align-items: center;">
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 700; color: #334155; cursor: pointer;">
+              <input type="checkbox" name="active" value="1" checked style="accent-color: #7C3AED; width: 16px; height: 16px;">
+              <span>Active / Visible</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 700; color: #334155; cursor: pointer;">
+              <input type="checkbox" name="is_first_time_offer" value="1" style="accent-color: #7C3AED; width: 16px; height: 16px;">
+              <span>One-Time Trial Offer</span>
+            </label>
+          </div>
+
+          <button type="submit" class="btn-primary" style="padding: 8px 20px; font-size: 0.85rem; font-weight: 700;">
+            🚀 Create &amp; Activate Package
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Package Cards List -->
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      {% for pkg in packages %}
+      <div class="package-edit-card" id="pkg_card_{{ pkg.id }}" style="background: #FFFFFF; border: 1.5px solid {% if pkg.is_first_time_offer %}#C4B5FD{% elif not pkg.active %}#E2E8F0{% else %}#E2E8F0{% endif %}; border-radius: 12px; padding: 16px; transition: box-shadow 0.15s ease, border-color 0.15s ease;">
+        
+        <!-- View Mode Header -->
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 1.05rem; font-weight: 800; color: #0F172A;">{{ pkg.name }}</span>
+            
+            {% if pkg.is_first_time_offer %}
+            <span style="font-size: 0.675rem; background: #EEF2FF; color: #4F46E5; padding: 2px 8px; border-radius: 9999px; font-weight: 800; border: 1px solid #C7D2FE;">
+              ★ ONE-TIME
+            </span>
+            {% endif %}
+
+            {% if pkg.active %}
+            <span style="font-size: 0.675rem; background: #DCFCE7; color: #16A34A; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">
+              ✓ ACTIVE
+            </span>
+            {% else %}
+            <span style="font-size: 0.675rem; background: #F1F5F9; color: #64748B; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">
+              DISABLED
+            </span>
+            {% endif %}
+          </div>
+
+          <div style="display: flex; align-items: baseline; gap: 4px;">
+            <span style="font-weight: 900; color: #7C3AED; font-size: 1.25rem;">{{ pkg.coins }}</span>
+            <span style="font-size: 0.8rem; font-weight: 700; color: #64748B;">Coins</span>
+            <span style="font-size: 0.8rem; color: #94A3B8; margin-left: 2px;">/ {{ pkg.days }} Days</span>
+          </div>
+        </div>
+
+        <!-- Editable Form Controls -->
+        <form action="{{ url_for('admin_update_package') }}" method="POST">
+          <input type="hidden" name="id" value="{{ pkg.id }}">
+
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+            <div>
+              <label class="form-label" style="font-size: 0.725rem; margin-bottom: 3px;">Package Title</label>
+              <input type="text" name="name" class="form-control" value="{{ pkg.name }}" required style="font-size: 0.85rem; padding: 7px 10px;">
+            </div>
+            <div>
+              <label class="form-label" style="font-size: 0.725rem; margin-bottom: 3px;">Duration (Days)</label>
+              <input type="number" name="days" class="form-control" value="{{ pkg.days }}" min="1" required style="font-size: 0.85rem; padding: 7px 10px; font-weight: 700; color: #0F172A;">
+            </div>
+            <div>
+              <label class="form-label" style="font-size: 0.725rem; margin-bottom: 3px;">Coins (🪙)</label>
+              <input type="number" name="coins" class="form-control" value="{{ pkg.coins }}" min="0" required style="font-size: 0.85rem; padding: 7px 10px; font-weight: 700; color: #7C3AED;">
+            </div>
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <label class="form-label" style="font-size: 0.725rem; margin-bottom: 3px;">Description &amp; User Benefit Note</label>
+            <input type="text" name="description" class="form-control" value="{{ pkg.description }}" placeholder="e.g. {{ pkg.days }} Days continuous runtime" style="font-size: 0.825rem; padding: 7px 10px;">
+          </div>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 8px; border-top: 1px solid #F1F5F9;">
+            <div style="display: flex; gap: 14px; align-items: center;">
+              <label style="display: flex; align-items: center; gap: 5px; font-size: 0.775rem; font-weight: 700; color: #334155; cursor: pointer;">
+                <input type="checkbox" name="active" value="1" {% if pkg.active %}checked{% endif %} style="accent-color: #7C3AED; width: 15px; height: 15px;">
+                <span>Active &amp; Visible</span>
+              </label>
+
+              <label style="display: flex; align-items: center; gap: 5px; font-size: 0.775rem; font-weight: 700; color: #334155; cursor: pointer;">
+                <input type="checkbox" name="is_first_time_offer" value="1" {% if pkg.is_first_time_offer %}checked{% endif %} style="accent-color: #7C3AED; width: 15px; height: 15px;">
+                <span>One-Time Offer</span>
+              </label>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button type="submit" class="btn-primary" style="padding: 6px 16px; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 5px;">
+                <span>💾 Save Changes</span>
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <!-- Optional Delete Button Form (separate to avoid nested forms) -->
+        {% if packages|length > 1 %}
+        <form action="{{ url_for('admin_delete_package', pkg_id=pkg.id) }}" method="POST" onsubmit="return confirm('Delete package tier \'{{ pkg.name }}\'?');" style="display: inline-block; margin-top: 6px; text-align: right; width: 100%;">
+          <button type="submit" style="background: none; border: none; color: #94A3B8; font-size: 0.725rem; cursor: pointer; text-decoration: underline;" onmouseover="this.style.color='#DC2626'" onmouseout="this.style.color='#94A3B8'">
+            Remove this tier
+          </button>
+        </form>
+        {% endif %}
+
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+function toggleNewPackageForm() {
+  const box = document.getElementById('new_package_box');
+  if (box) {
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    if (box.style.display === 'block') {
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+}
+
+function handleLogoPreview(input) {
+  if (input.files && input.files[0]) {
+    const file = input.files[0];
+    const fileNameDisplay = document.getElementById('admin_logo_filename');
+    if (fileNameDisplay) {
+      fileNameDisplay.textContent = 'Selected: ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+      fileNameDisplay.style.color = '#7C3AED';
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const mainPreview = document.getElementById('admin_logo_preview');
+      const navPreview = document.getElementById('admin_logo_nav_preview');
+      if (mainPreview) {
+        mainPreview.src = e.target.result;
+      }
+      if (navPreview) {
+        navPreview.src = e.target.result;
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+}
+</script>
+{% endblock %}

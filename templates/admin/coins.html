@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Coin Management — {{ site_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="container-mobile">
+
+  <!-- Admin Header -->
+  <div class="vip-card" style="padding: 20px 24px; margin-bottom: 16px; background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%); color: #FFFFFF; border: none;">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+      <div>
+        <a href="{{ url_for('admin_dashboard') }}" style="color: #A5B4FC; font-size: 0.8rem; font-weight: 700;">← Back to Admin Console</a>
+        <h1 style="font-size: 1.4rem; font-weight: 900; color: #FFFFFF; margin-top: 4px;">Coin Management</h1>
+      </div>
+      <div style="font-size: 0.85rem; background: rgba(255,255,255,0.15); padding: 6px 14px; border-radius: 9999px;">
+        Circulating: <strong>🪙 {{ total_system_coins }}</strong> Coins
+      </div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+    
+    <!-- Adjust Coins Form -->
+    <div class="vip-card" style="padding: 24px;">
+      <h2 style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin-bottom: 4px;">
+        Adjust User Coin Balance
+      </h2>
+      <p style="font-size: 0.825rem; color: #64748B; margin-bottom: 20px;">
+        Add promotional coins or deduct balance with automatic audit logging.
+      </p>
+
+      <form action="{{ url_for('admin_coins') }}" method="POST">
+        <input type="hidden" name="action" value="adjust_coins">
+
+        <div class="form-group">
+          <label class="form-label" for="user_identifier">Target User Email Address</label>
+          <input 
+            type="email" 
+            id="user_identifier" 
+            name="user_identifier" 
+            class="form-control" 
+            placeholder="e.g. user@gmail.com" 
+            value="{{ email_query or '' }}"
+            required
+            autocomplete="email"
+          >
+          <span style="font-size: 0.75rem; color: #64748B; margin-top: 4px; display: block;">
+            Search and update coins directly by user's exact registered email address.
+          </span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="amount">Coin Amount (Positive to Add, Negative to Deduct)</label>
+          <input 
+            type="number" 
+            id="amount" 
+            name="amount" 
+            class="form-control" 
+            placeholder="e.g. 50 or -20" 
+            required
+          >
+          <span style="font-size: 0.75rem; color: #64748B; margin-top: 4px; display: block;">
+            Examples: <code>100</code> grants 100 coins. <code>-50</code> removes 50 coins.
+          </span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="reason">Reason / Memo for Audit Log</label>
+          <input 
+            type="text" 
+            id="reason" 
+            name="reason" 
+            class="form-control" 
+            placeholder="e.g. VIP Member Reward / Compensation" 
+            required
+          >
+        </div>
+
+        <button type="submit" class="btn-primary btn-block" style="padding: 12px;">
+          Confirm Coin Adjustment
+        </button>
+      </form>
+    </div>
+
+    <!-- Quick User Search List -->
+    <div class="vip-card" style="padding: 20px;">
+      <h3 style="font-size: 1.05rem; font-weight: 800; color: #0F172A; margin-bottom: 12px;">Top User Balances</h3>
+      
+      <div style="display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto;">
+        {% for u in users %}
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: #F8FAFC; border-radius: 10px; font-size: 0.85rem;">
+          <div>
+            <div style="font-weight: 700; color: #0F172A;">{{ u.full_name }}</div>
+            <div style="font-size: 0.75rem; color: #64748B;">@{{ u.username }} ({{ u.email }})</div>
+          </div>
+          <button type="button" onclick="document.getElementById('user_identifier').value='{{ u.email }}'" class="btn-secondary btn-sm" style="font-weight: 800; color: #D97706; border-color: #FDE68A;">
+            🪙 {{ u.coins }}
+          </button>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Global Transactions Stream -->
+  <div class="vip-card" style="margin-top: 20px; padding: 20px;">
+    <h3 style="font-size: 1.1rem; font-weight: 800; color: #0F172A; margin-bottom: 14px;">Recent System Transactions</h3>
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      {% for tx in recent_transactions %}
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #F8FAFC; border-radius: 10px; font-size: 0.85rem;">
+        <div>
+          <div style="font-weight: 700; color: #0F172A;">
+            {{ tx.username }} — <span style="font-weight: normal; color: #475569;">{{ tx.description }}</span>
+          </div>
+          <div style="font-size: 0.725rem; color: #94A3B8;">{{ tx.created_at }}</div>
+        </div>
+        <div style="font-weight: 800; font-size: 0.95rem; color: {% if tx.amount > 0 %}#10B981{% else %}#EF4444{% endif %};">
+          {% if tx.amount > 0 %}+{{ tx.amount }}{% else %}{{ tx.amount }}{% endif %} Coins
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}

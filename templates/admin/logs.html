@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Audit Logs — {{ vip_site_name }}{% endblock %}
+
+{% block content %}
+<div class="container-mobile">
+
+  <!-- Header Breadcrumb -->
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <a href="{{ url_for('admin_dashboard') }}" class="btn-secondary btn-sm">← Back</a>
+      <div>
+        <h1 style="font-size: 1.5rem; font-weight: 800; color: #0F172A; margin: 0;">System Audit Logs</h1>
+        <p style="font-size: 0.85rem; color: #64748B; margin: 2px 0 0;">Track administrative operations, balance adjustments and configuration changes</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logs Table Card -->
+  <div class="vip-card" style="padding: 20px;">
+    <div style="font-weight: 800; font-size: 1.1rem; color: #0F172A; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
+      <span>📜</span> Recent Audit Records
+    </div>
+
+    {% if logs %}
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      {% for log in logs %}
+      <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; background: #F8FAFC; border: 1px solid var(--border-light); border-radius: 12px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 0.75rem; font-weight: 800; background: #EEF2FF; color: #4F46E5; padding: 2px 8px; border-radius: 6px;">
+              {{ log.action }}
+            </span>
+            <span style="font-size: 0.85rem; font-weight: 700; color: #0F172A;">
+              by @{{ log.admin_username }}
+            </span>
+          </div>
+          <span style="font-size: 0.75rem; color: #94A3B8; font-family: var(--font-mono);">
+            {{ log.created_at|format_datetime }}
+          </span>
+        </div>
+
+        <div style="font-size: 0.825rem; color: #475569; margin-top: 4px;">
+          <strong>Target:</strong> {{ log.target }}
+          {% if log.details %}
+          <span style="color: #64748B;">• {{ log.details }}</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 30px; color: #94A3B8;">
+      No audit logs recorded yet.
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
