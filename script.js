@@ -1,10 +1,9 @@
 /* ============================================================
    HOSTX VIP — MAIN JAVASCRIPT
-   Premium Hosting Platform
    ============================================================ */
 
 // ============================================================
-// 1. PAGE LOADER
+// 1. LOADER
 // ============================================================
 (function() {
   function hideLoader() {
@@ -22,7 +21,8 @@
 // ============================================================
 // 2. TOASTS
 // ============================================================
-function showToast(msg, type = 'info') {
+function showToast(msg, type) {
+  type = type || 'info';
   const container = document.getElementById('toasts');
   if (!container) return;
   const t = document.createElement('div');
@@ -31,10 +31,10 @@ function showToast(msg, type = 'info') {
   container.appendChild(t);
   setTimeout(() => {
     t.style.opacity = '0';
-    t.style.transform = 'translateX(30px)';
+    t.style.transform = 'translateX(20px)';
     t.style.transition = 'all 0.3s ease';
     setTimeout(() => t.remove(), 300);
-  }, 4000);
+  }, 3500);
 }
 
 // ============================================================
@@ -96,10 +96,10 @@ function loadNotifications() {
       }
       let html = '';
       data.notifications.forEach(n => {
-        html += `<div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="deleteNotif(${n.id}, event)">
-          <div class="notif-item-title"><b>${escapeHtml(n.title)}</b><span>${n.created_at.split('.')[0]}</span></div>
-          <div class="notif-item-msg">${escapeHtml(n.message)}</div>
-        </div>`;
+        html += '<div class="notif-item ' + (n.is_read ? '' : 'unread') + '" onclick="deleteNotif(' + n.id + ', event)">' +
+          '<div class="notif-item-title"><b>' + escapeHtml(n.title) + '</b><span>' + n.created_at.split('.')[0] + '</span></div>' +
+          '<div class="notif-item-msg">' + escapeHtml(n.message) + '</div>' +
+          '</div>';
       });
       list.innerHTML = html;
     })
@@ -107,27 +107,31 @@ function loadNotifications() {
       if (list) list.innerHTML = '<div class="empty-mini">Failed to load.</div>';
     });
 }
+
 function deleteNotif(id, event) {
   if (event) event.stopPropagation();
-  fetch(`/api/notifications/${id}/delete`, { method: 'POST' })
+  fetch('/api/notifications/' + id + '/delete', { method: 'POST' })
     .then(r => r.json())
     .then(() => loadNotifications());
 }
+
 function clearAllNotifs(event) {
   if (event) event.stopPropagation();
   fetch('/api/notifications/clear-all', { method: 'POST' })
     .then(r => r.json())
     .then(() => {
-      showToast('All notifications cleared', 'success');
+      showToast('All notifications cleared.', 'success');
       loadNotifications();
     });
 }
+
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
+
 if (document.getElementById('notif-list')) {
   loadNotifications();
   setInterval(loadNotifications, 30000);
@@ -171,14 +175,14 @@ function loadCaptcha() {
       const ans = document.getElementById('fp-captcha-answer');
       if (ans) ans.value = '';
     })
-    .catch(() => { box.textContent = 'Error loading'; });
+    .catch(() => { box.textContent = 'Error'; });
 }
 function fpSubmitCaptcha() {
   const ans = (document.getElementById('fp-captcha-answer') || {}).value || '';
   const err = document.getElementById('fp-cap-err');
   if (err) err.style.display = 'none';
   if (!ans) {
-    if (err) { err.textContent = 'Please enter the answer'; err.style.display = 'block'; }
+    if (err) { err.textContent = 'Enter answer.'; err.style.display = 'block'; }
     return;
   }
   fetch('/api/forgot-password/verify-captcha', {
@@ -190,12 +194,12 @@ function fpSubmitCaptcha() {
     .then(data => {
       if (data.success) showFpStep(2);
       else {
-        if (err) { err.textContent = data.message || 'Incorrect answer'; err.style.display = 'block'; }
+        if (err) { err.textContent = data.message || 'Incorrect.'; err.style.display = 'block'; }
         loadCaptcha();
       }
     })
     .catch(() => {
-      if (err) { err.textContent = 'Connection error'; err.style.display = 'block'; }
+      if (err) { err.textContent = 'Connection error.'; err.style.display = 'block'; }
     });
 }
 function fpSubmitEmail() {
@@ -203,7 +207,7 @@ function fpSubmitEmail() {
   const err = document.getElementById('fp-email-err');
   if (err) err.style.display = 'none';
   if (!email) {
-    if (err) { err.textContent = 'Please enter your email'; err.style.display = 'block'; }
+    if (err) { err.textContent = 'Enter email.'; err.style.display = 'block'; }
     return;
   }
   fetch('/api/forgot-password/verify-email', {
@@ -215,11 +219,11 @@ function fpSubmitEmail() {
     .then(data => {
       if (data.success) showFpStep(3);
       else {
-        if (err) { err.textContent = data.message || 'Email not registered'; err.style.display = 'block'; }
+        if (err) { err.textContent = data.message || 'Not registered.'; err.style.display = 'block'; }
       }
     })
     .catch(() => {
-      if (err) { err.textContent = 'Connection error'; err.style.display = 'block'; }
+      if (err) { err.textContent = 'Connection error.'; err.style.display = 'block'; }
     });
 }
 function fpSubmitReset() {
@@ -228,15 +232,15 @@ function fpSubmitReset() {
   const err = document.getElementById('fp-pw-err');
   if (err) err.style.display = 'none';
   if (!pw || !cp) {
-    if (err) { err.textContent = 'Both fields required'; err.style.display = 'block'; }
+    if (err) { err.textContent = 'All fields required.'; err.style.display = 'block'; }
     return;
   }
   if (pw !== cp) {
-    if (err) { err.textContent = 'Passwords do not match'; err.style.display = 'block'; }
+    if (err) { err.textContent = 'Passwords do not match.'; err.style.display = 'block'; }
     return;
   }
   if (pw.length < 6) {
-    if (err) { err.textContent = 'Minimum 6 characters'; err.style.display = 'block'; }
+    if (err) { err.textContent = 'Min 6 characters.'; err.style.display = 'block'; }
     return;
   }
   fetch('/api/forgot-password/reset', {
@@ -247,14 +251,14 @@ function fpSubmitReset() {
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        showToast('Password updated! Please sign in', 'success');
+        showToast('Password updated! Please sign in.', 'success');
         closeForgotModal();
       } else {
-        if (err) { err.textContent = data.message || 'Error'; err.style.display = 'block'; }
+        if (err) { err.textContent = data.message || 'Error.'; err.style.display = 'block'; }
       }
     })
     .catch(() => {
-      if (err) { err.textContent = 'Connection error'; err.style.display = 'block'; }
+      if (err) { err.textContent = 'Connection error.'; err.style.display = 'block'; }
     });
 }
 
@@ -268,7 +272,8 @@ function serverAction(serverId, action) {
     btn.disabled = true;
     btn.innerHTML = '⏳ Please wait...';
   }
-  fetch(`/api/servers/${serverId}/action`, {
+
+  fetch('/api/servers/' + serverId + '/action', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: action })
@@ -276,14 +281,14 @@ function serverAction(serverId, action) {
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        showToast(data.message || 'Success', 'success');
+        showToast(data.message || 'Success!', 'success');
         updateStatusBadge(data.status, data.pid);
         updatePidBadge(data.pid);
-        setTimeout(() => window.location.reload(), 1000);
+        setTimeout(() => window.location.reload(), 900);
       } else {
-        if (data.plan_required) {
-          showToast(data.message || 'Please purchase a plan', 'warning');
-          setTimeout(() => window.location.href = '/packages', 1200);
+        if (data.plan_required || (data.redirect_url && data.redirect_url === '/packages')) {
+          showToast(data.message || 'Purchase a plan first.', 'warning');
+          setTimeout(() => { window.location.href = '/packages'; }, 1200);
           return;
         }
         if (data.no_entry_file || data.redirect_url) {
@@ -292,9 +297,9 @@ function serverAction(serverId, action) {
           else if (data.redirect_url) window.location.href = data.redirect_url;
         } else if (data.package_required && data.missing_packages) {
           const names = data.missing_packages.map(p => p.name).join(', ');
-          showToast('Installing missing packages: ' + names, 'warning');
+          showToast('Missing packages: ' + names, 'warning');
         } else {
-          showToast(data.message || 'Action failed', 'danger');
+          showToast(data.message || 'Action failed.', 'danger');
         }
         if (btn) {
           btn.disabled = false;
@@ -310,6 +315,7 @@ function serverAction(serverId, action) {
       }
     });
 }
+
 function updateStatusBadge(status, pid) {
   const badge = document.getElementById('status-badge');
   if (!badge) return;
@@ -349,52 +355,57 @@ function updatePidBadge(pid) {
 }
 
 // ============================================================
-// 8. LIVE LOGS + URL CARD (Show after running)
+// 8. LIVE LOG STREAM
 // ============================================================
 let logStreamInterval = null;
+
 function startLogStream(serverId, startTime) {
   const term = document.getElementById('terminal');
   if (!term) return;
   const tick = document.getElementById('uptime-tick');
   const urlCard = document.getElementById('url-card');
   const urlInput = document.getElementById('server-url-input');
-  const openUrlBtn = document.getElementById('open-url-btn');
-  let urlShown = false;
+  const openBtn = document.getElementById('open-url-btn');
 
   function fetchLogs() {
-    fetch(`/api/servers/${serverId}/logs`)
+    fetch('/api/servers/' + serverId + '/logs')
       .then(r => r.json())
       .then(data => {
-        // Update terminal
-        if (data.raw_logs || data.db_logs) {
+        // Terminal update
+        if (data.raw_logs) {
+          const lines = data.raw_logs.split('\n');
           let html = '';
-          // DB logs (INFO, SUCCESS, ERROR messages)
-          if (data.db_logs && data.db_logs.length > 0) {
-            data.db_logs.forEach(log => {
-              const cls = log.level === 'ERROR' ? 'log-error' : (log.level === 'WARNING' ? 'log-warning' : (log.level === 'SUCCESS' ? 'log-success' : 'log-info'));
-              html += `<div class="log-line ${cls}">[${log.time.split('.')[0]}] [${log.level}] ${escapeHtml(log.message)}</div>`;
-            });
-          }
-          // Raw stdout/stderr from user's code
-          if (data.raw_logs) {
-            const lines = data.raw_logs.split('\n');
-            lines.slice(-200).forEach(line => {
-              if (!line.trim()) return;
-              let cls = 'log-info';
-              const lower = line.toLowerCase();
-              if (lower.includes('error') || lower.includes('traceback') || lower.includes('exception')) cls = 'log-error';
-              else if (lower.includes('warning') || lower.includes('warn')) cls = 'log-warning';
-              else if (lower.includes('success') || lower.includes('started') || lower.includes('running')) cls = 'log-success';
-              html += `<div class="log-line ${cls}">${escapeHtml(line)}</div>`;
-            });
-          }
+          lines.slice(-300).forEach(line => {
+            if (!line.trim()) return;
+            let cls = 'log-info';
+            const lower = line.toLowerCase();
+            if (lower.includes('error') || lower.includes('traceback') || lower.includes('exception')) cls = 'log-error';
+            else if (lower.includes('warning') || lower.includes('warn')) cls = 'log-warning';
+            else if (lower.includes('server is running') || lower.includes('url:') || lower.includes('🎉')) cls = 'log-link';
+            else if (lower.includes('success') || lower.includes('started') || lower.includes('running')) cls = 'log-success';
+            else if (lower.includes('stopping') || lower.includes('stopped')) cls = 'log-running';
+            html += '<div class="log-line ' + cls + '">' + escapeHtml(line) + '</div>';
+          });
           term.innerHTML = html || '<div class="log-line log-info">[INFO] Waiting for output...</div>';
           term.scrollTop = term.scrollHeight;
         }
-        // Update status
+
+        // Status update
         updatePidBadge(data.pid);
         updateStatusBadge(data.status, data.pid);
-        // Update uptime
+
+        // URL card — sirf running pe show, aur tab hi jab server_url ho
+        if (urlCard && urlInput) {
+          if (data.status === 'running' && data.server_url) {
+            urlCard.style.display = 'block';
+            urlInput.value = data.server_url;
+            if (openBtn) openBtn.href = data.server_url;
+          } else {
+            urlCard.style.display = 'none';
+          }
+        }
+
+        // Uptime
         if (data.status === 'running' && data.start_time > 0) {
           const secs = Math.floor(Date.now() / 1000 - data.start_time);
           const h = Math.floor(secs / 3600);
@@ -407,42 +418,28 @@ function startLogStream(serverId, startTime) {
         } else {
           if (tick) tick.textContent = '00:00:00';
         }
-        // ⚡ URL card — SHOW only after server is running
-        if (data.status === 'running' && data.server_url && !urlShown) {
-          urlShown = true;
-          if (urlCard) urlCard.style.display = 'block';
-          if (urlInput) urlInput.value = data.server_url;
-          if (openUrlBtn) openUrlBtn.href = data.server_url;
-        }
       })
       .catch(() => {});
   }
+
   fetchLogs();
   if (logStreamInterval) clearInterval(logStreamInterval);
   logStreamInterval = setInterval(fetchLogs, 3000);
 }
+
 function clearLogs(serverId) {
   if (!confirm('Clear all logs for this server?')) return;
-  fetch(`/api/servers/${serverId}/logs/clear`, { method: 'POST' })
+  fetch('/api/servers/' + serverId + '/logs/clear', { method: 'POST' })
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        showToast('Logs cleared', 'success');
+        showToast('Logs cleared.', 'success');
         const term = document.getElementById('terminal');
         if (term) term.innerHTML = '<div class="log-line log-info">[INFO] Logs cleared.</div>';
       } else {
-        showToast(data.message || 'Failed', 'danger');
+        showToast(data.message || 'Failed.', 'danger');
       }
     });
-}
-function copyServerUrl() {
-  const inp = document.getElementById('server-url-input');
-  if (!inp) return;
-  inp.select();
-  inp.setSelectionRange(0, 99999);
-  navigator.clipboard.writeText(inp.value).then(() => {
-    showToast('URL copied to clipboard!', 'success');
-  });
 }
 
 // ============================================================
@@ -452,17 +449,22 @@ function quickCommand(cmd) {
   const inp = document.getElementById('terminal-input');
   if (inp) { inp.value = cmd; inp.focus(); }
 }
+
 function sendTerminalCommand() {
   const input = document.getElementById('terminal-input');
   if (!input || !input.value.trim()) return;
   const cmd = input.value.trim();
   input.value = '';
-  const term = document.getElementById('interactive-terminal');
+
+  const term = document.getElementById('terminal');
   if (!term) return;
-  term.innerHTML += `<div class="log-line log-info">$ ${escapeHtml(cmd)}</div>`;
+  term.innerHTML += '<div class="log-line log-info">$ ' + escapeHtml(cmd) + '</div>';
   term.scrollTop = term.scrollHeight;
-  const sid = term.dataset.serverId;
-  fetch(`/api/servers/${sid}/terminal`, {
+
+  const sid = term.dataset.serverId || term.getAttribute('data-server-id');
+  if (!sid) return;
+
+  fetch('/api/servers/' + sid + '/terminal', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ command: cmd })
@@ -474,11 +476,11 @@ function sendTerminalCommand() {
         lines.forEach(line => {
           if (line.trim()) {
             const cls = line.toLowerCase().includes('error') ? 'log-error' : 'log-success';
-            term.innerHTML += `<div class="log-line ${cls}">${escapeHtml(line)}</div>`;
+            term.innerHTML += '<div class="log-line ' + cls + '">' + escapeHtml(line) + '</div>';
           }
         });
       } else {
-        term.innerHTML += `<div class="log-line log-error">Error: ${escapeHtml(data.message)}</div>`;
+        term.innerHTML += '<div class="log-line log-error">Error: ' + escapeHtml(data.message) + '</div>';
       }
       term.scrollTop = term.scrollHeight;
     })
@@ -486,181 +488,48 @@ function sendTerminalCommand() {
       term.innerHTML += '<div class="log-line log-error">Network error</div>';
     });
 }
+
 function clearTerminal() {
-  const term = document.getElementById('interactive-terminal');
+  const term = document.getElementById('terminal');
   if (term) term.innerHTML = '<div class="log-line log-info">[INFO] Terminal cleared.</div>';
 }
 
 // ============================================================
-// 10. DELETE SERVER (with confirmation)
+// 10. RENEW SERVER
 // ============================================================
-function deleteServer(serverId, serverName) {
-  if (!confirm(`Delete "${serverName}" and ALL its files?\n\nThis cannot be undone.`)) return;
-  fetch(`/api/servers/${serverId}/delete`, { method: 'POST' })
-    .then(r => r.json())
-    .then(data => {
-      if (data.success) {
-        showToast('Server deleted', 'success');
-        setTimeout(() => window.location.href = '/dashboard', 1200);
-      } else {
-        showToast(data.message || 'Delete failed', 'danger');
-      }
-    })
-    .catch(() => showToast('Network error', 'danger'));
-}
-
-// ============================================================
-// 11. RENEW MODAL
-// ============================================================
-function openRenewModal() {
-  const m = document.getElementById('renew-modal');
-  if (m) {
-    m.style.display = 'flex';
-    updateRenewButton();
-  }
-}
-function closeRenewModal() {
-  const m = document.getElementById('renew-modal');
-  if (m) m.style.display = 'none';
-}
-function updateRenewButton() {
-  const selected = document.querySelector('input[name="renew_pkg"]:checked');
-  const btn = document.getElementById('renew-continue-btn');
-  if (!selected || !btn) return;
-  const price = selected.closest('.renew-plan-option')?.querySelector('.renew-price')?.textContent?.trim() || '';
-  btn.innerHTML = `Continue → ${price}`;
-}
-function continueRenew() {
-  const selected = document.querySelector('input[name="renew_pkg"]:checked');
-  if (selected) {
-    window.location.href = `/checkout/${selected.value}`;
-  } else {
-    showToast('Please select a plan', 'warning');
-  }
-}
-
-// ============================================================
-// 12. PAYMENT / CHECKOUT
-// ============================================================
-function copyUpiId() {
-  const el = document.getElementById('upi-id-display');
-  if (!el) return;
-  const text = el.dataset.upi || el.textContent.trim();
-  navigator.clipboard.writeText(text).then(() => {
-    showToast('UPI ID copied', 'success');
-  }).catch(() => {
-    const range = document.createRange();
-    range.selectNode(el);
-    window.getSelection().removeAllRanges();
-    window.getSelection().addRange(range);
-    document.execCommand('copy');
-    showToast('UPI ID copied', 'success');
-  });
-}
-function copyText(text) {
-  navigator.clipboard.writeText(text).then(() => {
-    showToast('Copied!', 'success');
-  });
-}
-function selectPayMethod(el) {
-  document.querySelectorAll('.pay-method-card').forEach(c => c.classList.remove('selected'));
-  el.classList.add('selected');
-  el.querySelector('input[type="radio"]').checked = true;
-}
-
-// Open UPI app via deep link
-function openUpiApp(app) {
-  const upi = document.getElementById('upi-id-display')?.dataset.upi || '';
-  const amount = document.getElementById('qr-amount')?.dataset.amount || '0';
-  const orderId = document.getElementById('payment-poll-order')?.dataset.orderId || '';
-  if (!upi) return;
-
-  const urls = {
-    phonepe: `phonepe://pay?pa=${encodeURIComponent(upi)}&pn=HostX&am=${amount}&cu=INR&tn=Order${orderId}`,
-    gpay: `tez://upi/pay?pa=${encodeURIComponent(upi)}&pn=HostX&am=${amount}&cu=INR&tn=Order${orderId}`,
-    paytm: `paytmmp://pay?pa=${encodeURIComponent(upi)}&pn=HostX&am=${amount}&cu=INR&tn=Order${orderId}`,
-    fampay: `fam://pay?pa=${encodeURIComponent(upi)}&pn=HostX&am=${amount}&cu=INR&tn=Order${orderId}`,
-    bhim: `upi://pay?pa=${encodeURIComponent(upi)}&pn=HostX&am=${amount}&cu=INR&tn=Order${orderId}`,
-    amazonpay: `amazonpay://pay?pa=${encodeURIComponent(upi)}&pn=HostX&am=${amount}&cu=INR&tn=Order${orderId}`
-  };
-  const url = urls[app];
-  if (url) {
-    // Try deep link
-    window.location.href = url;
-    // Fallback to generic UPI
-    setTimeout(() => {
-      window.location.href = `upi://pay?pa=${encodeURIComponent(upi)}&pn=HostX&am=${amount}&cu=INR&tn=Order${orderId}`;
-    }, 800);
-  }
-}
-
-// Payment polling
-let paymentPollInterval = null;
-function startPaymentPoll(orderId) {
-  if (!orderId) return;
-  const statusEl = document.getElementById('payment-status-text');
-  const statusSub = document.getElementById('payment-status-sub');
-  let attempts = 0;
-  const maxAttempts = 200;
-  paymentPollInterval = setInterval(() => {
-    attempts++;
-    if (attempts > maxAttempts) {
-      clearInterval(paymentPollInterval);
-      if (statusEl) statusEl.textContent = '⏰ Payment timeout';
-      if (statusSub) statusSub.textContent = 'Please contact support if amount was deducted';
-      return;
-    }
-    fetch(`/api/payment/check/${orderId}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.success && data.status === 'paid') {
-          clearInterval(paymentPollInterval);
-          if (statusEl) statusEl.textContent = '✅ Payment Successful!';
-          if (statusSub) statusSub.textContent = 'Redirecting to dashboard...';
-          showToast('Payment successful!', 'success');
-          setTimeout(() => window.location.href = data.redirect || '/dashboard', 1500);
-        }
-      })
-      .catch(() => {});
-  }, 3000);
-}
-
-// Manual transaction ID submit
-function submitTransactionId(orderId) {
-  const inp = document.getElementById('txn-id-input');
-  if (!inp || !inp.value.trim()) {
-    showToast('Please enter transaction ID', 'warning');
+function submitRenew(serverId, isExpired) {
+  const selector = isExpired ? 'input[name="renew_pkg_exp"]:checked' : 'input[name="renew_pkg"]:checked';
+  const selected = document.querySelector(selector);
+  if (!selected) {
+    showToast('Please select a package.', 'warning');
     return;
   }
-  const btn = document.getElementById('txn-submit-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
-  fetch(`/api/payment/manual/${orderId}/submit`, {
+  const btn = document.querySelector('#renew-modal .btn-primary, .modal-card .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
+
+  fetch('/api/servers/' + serverId + '/renew', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transaction_id: inp.value.trim() })
+    body: JSON.stringify({ package_id: selected.value })
   })
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        showToast('Thank you! Payment is being processed', 'success');
-        const form = document.getElementById('txn-form');
-        const done = document.getElementById('txn-done');
-        if (form) form.style.display = 'none';
-        if (done) done.style.display = 'block';
-        setTimeout(() => window.location.href = '/dashboard', 3000);
+        showToast(data.message || 'Renewed!', 'success');
+        setTimeout(() => window.location.reload(), 900);
       } else {
-        showToast(data.message || 'Submit failed', 'danger');
-        if (btn) { btn.disabled = false; btn.textContent = 'Submit Transaction ID'; }
+        showToast(data.message || 'Renewal failed.', 'danger');
+        if (btn) { btn.disabled = false; btn.textContent = 'Confirm Extension'; }
       }
     })
     .catch(() => {
-      showToast('Network error', 'danger');
-      if (btn) { btn.disabled = false; btn.textContent = 'Submit Transaction ID'; }
+      showToast('Network error.', 'danger');
+      if (btn) { btn.disabled = false; btn.textContent = 'Confirm Extension'; }
     });
 }
 
 // ============================================================
-// 13. FILE MANAGER
+// 11. FILE MANAGER
 // ============================================================
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 B';
@@ -669,8 +538,10 @@ function formatBytes(bytes) {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
+
 function uploadFile(serverId, input, isZip) {
   if (!input.files || input.files.length === 0) return;
+
   const files = input.files;
   const fd = new FormData();
   const urlParams = new URLSearchParams(window.location.search);
@@ -678,6 +549,7 @@ function uploadFile(serverId, input, isZip) {
   for (let i = 0; i < files.length; i++) {
     fd.append('files', files[i]);
   }
+
   const modal = document.getElementById('up-modal');
   const title = document.getElementById('up-title');
   const icon = document.getElementById('up-icon');
@@ -685,14 +557,16 @@ function uploadFile(serverId, input, isZip) {
   const bar = document.getElementById('up-bar');
   const pct = document.getElementById('up-pct');
   const size = document.getElementById('up-size');
+
   if (modal) modal.style.display = 'flex';
   if (title) title.textContent = isZip ? 'Uploading & Extracting ZIP...' : 'Uploading Files...';
   if (icon) icon.textContent = isZip ? '📦' : '📤';
-  if (sub) sub.textContent = 'Please wait';
+  if (sub) sub.textContent = 'Please wait.';
   if (bar) bar.style.width = '0%';
 
   const xhr = new XMLHttpRequest();
-  xhr.open('POST', `/api/servers/${serverId}/files/upload`, true);
+  xhr.open('POST', '/api/servers/' + serverId + '/files/upload', true);
+
   xhr.upload.onprogress = function(e) {
     if (e.lengthComputable) {
       const percent = Math.round((e.loaded / e.total) * 100);
@@ -702,6 +576,7 @@ function uploadFile(serverId, input, isZip) {
       if (sub && percent >= 100) sub.textContent = 'Processing on server...';
     }
   };
+
   xhr.onload = function() {
     if (modal) modal.style.display = 'none';
     try {
@@ -710,28 +585,31 @@ function uploadFile(serverId, input, isZip) {
         showToast(data.message || 'Uploaded!', 'success');
         setTimeout(() => window.location.reload(), 700);
       } else {
-        showToast(data.message || 'Upload failed', 'danger');
+        showToast(data.message || 'Upload failed.', 'danger');
       }
     } catch {
-      showToast('Invalid server response', 'danger');
+      showToast('Invalid server response.', 'danger');
     }
     input.value = '';
   };
+
   xhr.onerror = function() {
     if (modal) modal.style.display = 'none';
-    showToast('Network error during upload', 'danger');
+    showToast('Network error during upload.', 'danger');
     input.value = '';
   };
+
   xhr.send(fd);
 }
+
 function promptFolder(serverId) {
-  const name = prompt('Enter folder name:');
+  const name = prompt('New folder name:');
   if (!name) return;
   const fd = new FormData();
   const urlParams = new URLSearchParams(window.location.search);
   fd.append('path', urlParams.get('path') || '');
   fd.append('folder_name', name);
-  fetch(`/api/servers/${serverId}/files/create-folder`, { method: 'POST', body: fd })
+  fetch('/api/servers/' + serverId + '/files/create-folder', { method: 'POST', body: fd })
     .then(r => r.json())
     .then(data => {
       if (data.success) {
@@ -740,14 +618,15 @@ function promptFolder(serverId) {
       } else showToast(data.message, 'danger');
     });
 }
+
 function promptFile(serverId) {
-  const name = prompt('Enter file name (e.g. config.py):');
+  const name = prompt('New file name (e.g. config.py):');
   if (!name) return;
   const fd = new FormData();
   const urlParams = new URLSearchParams(window.location.search);
   fd.append('path', urlParams.get('path') || '');
   fd.append('file_name', name);
-  fetch(`/api/servers/${serverId}/files/create-file`, { method: 'POST', body: fd })
+  fetch('/api/servers/' + serverId + '/files/create-file', { method: 'POST', body: fd })
     .then(r => r.json())
     .then(data => {
       if (data.success) {
@@ -756,36 +635,41 @@ function promptFile(serverId) {
       } else showToast(data.message, 'danger');
     });
 }
+
 function openEditor(serverId, path) {
   const modal = document.getElementById('editor-modal');
   const nameEl = document.getElementById('ed-file');
   const pathEl = document.getElementById('ed-path');
   const contentEl = document.getElementById('ed-content');
   if (!modal) return;
+
   if (nameEl) nameEl.textContent = path.split('/').pop();
   if (pathEl) pathEl.value = path;
   if (contentEl) contentEl.value = 'Loading...';
   modal.style.display = 'flex';
-  fetch(`/api/servers/${serverId}/files/read?path=${encodeURIComponent(path)}`)
+
+  fetch('/api/servers/' + serverId + '/files/read?path=' + encodeURIComponent(path))
     .then(r => r.json())
     .then(data => {
       if (data.success) {
         if (contentEl) contentEl.value = data.content || '';
       } else {
-        if (contentEl) contentEl.value = '// Error: ' + (data.message || 'Could not load');
+        if (contentEl) contentEl.value = '// Error: ' + (data.message || 'Could not load.');
       }
     })
     .catch(() => {
-      if (contentEl) contentEl.value = '// Failed to load file';
+      if (contentEl) contentEl.value = '// Failed to load file.';
     });
 }
+
 function saveEditor(serverId) {
   const pathEl = document.getElementById('ed-path');
   const contentEl = document.getElementById('ed-content');
   const btn = document.getElementById('ed-save');
   if (!pathEl || !contentEl) return;
   if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
-  fetch(`/api/servers/${serverId}/files/save`, {
+
+  fetch('/api/servers/' + serverId + '/files/save', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path: pathEl.value, content: contentEl.value })
@@ -793,39 +677,41 @@ function saveEditor(serverId) {
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        showToast('File saved', 'success');
+        showToast('File saved!', 'success');
         const m = document.getElementById('editor-modal');
         if (m) m.style.display = 'none';
       } else {
-        showToast(data.message || 'Save failed', 'danger');
+        showToast(data.message || 'Save failed.', 'danger');
       }
       if (btn) { btn.disabled = false; btn.textContent = '💾 Save'; }
     })
     .catch(() => {
-      showToast('Network error', 'danger');
+      showToast('Network error.', 'danger');
       if (btn) { btn.disabled = false; btn.textContent = '💾 Save'; }
     });
 }
+
 function deleteItem(serverId, path) {
-  if (!confirm(`Delete "${path}"?\n\nThis cannot be undone.`)) return;
-  fetch(`/api/servers/${serverId}/files/delete`, {
+  if (!confirm('Delete "' + path + '"? This cannot be undone.')) return;
+  fetch('/api/servers/' + serverId + '/files/delete', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path })
+    body: JSON.stringify({ path: path })
   })
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        showToast('Deleted', 'success');
+        showToast('Deleted.', 'success');
         setTimeout(() => window.location.reload(), 600);
       } else showToast(data.message, 'danger');
     });
 }
+
 function renameItem(serverId, path) {
   const oldName = path.split('/').pop();
-  const newName = prompt(`Rename "${oldName}" to:`, oldName);
+  const newName = prompt('Rename "' + oldName + '" to:', oldName);
   if (!newName || newName === oldName) return;
-  fetch(`/api/servers/${serverId}/files/rename`, {
+  fetch('/api/servers/' + serverId + '/files/rename', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ old_path: path, new_name: newName })
@@ -838,62 +724,255 @@ function renameItem(serverId, path) {
       } else showToast(data.message, 'danger');
     });
 }
+
 function unzipItem(serverId, path) {
-  if (!confirm(`Extract "${path}"?`)) return;
-  fetch(`/api/servers/${serverId}/files/unzip`, {
+  if (!confirm('Extract "' + path + '"?')) return;
+  fetch('/api/servers/' + serverId + '/files/unzip', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path })
+    body: JSON.stringify({ path: path })
   })
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        showToast(data.message || 'Extracted', 'success');
+        showToast(data.message || 'Extracted!', 'success');
         setTimeout(() => window.location.reload(), 900);
       } else showToast(data.message, 'danger');
     });
 }
 
+function toggleSelectAll(checkbox) {
+  document.querySelectorAll('.fm-table-row .fm-checkbox').forEach(cb => {
+    cb.checked = checkbox.checked;
+    const row = cb.closest('.fm-table-row');
+    if (row) row.classList.toggle('selected', checkbox.checked);
+  });
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const selected = document.querySelectorAll('.fm-table-row .fm-checkbox:checked');
+  const bar = document.getElementById('fm-bulk-bar');
+  const countEl = document.getElementById('fm-selected-count');
+  if (!bar) return;
+  if (selected.length > 0) {
+    bar.classList.add('active');
+    if (countEl) countEl.textContent = selected.length;
+  } else {
+    bar.classList.remove('active');
+  }
+}
+
+function bulkDelete(serverId) {
+  const selected = Array.from(document.querySelectorAll('.fm-table-row .fm-checkbox:checked'))
+    .map(cb => cb.dataset.path);
+  if (selected.length === 0) return;
+  if (!confirm('Delete ' + selected.length + ' items?')) return;
+  let done = 0;
+  let failed = 0;
+  selected.forEach(path => {
+    fetch('/api/servers/' + serverId + '/files/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) done++; else failed++;
+        if (done + failed === selected.length) {
+          showToast('Deleted ' + done + (failed ? ', failed ' + failed : ''), done ? 'success' : 'danger');
+          setTimeout(() => window.location.reload(), 800);
+        }
+      });
+  });
+}
+
+function filterFiles() {
+  const input = document.getElementById('fm-search-input');
+  if (!input) return;
+  const query = input.value.toLowerCase();
+  document.querySelectorAll('.fm-table-row').forEach(row => {
+    const name = (row.dataset.name || '').toLowerCase();
+    row.style.display = name.includes(query) ? 'grid' : 'none';
+  });
+}
+
+function sortFiles(field) {
+  const url = new URL(window.location.href);
+  const currentSort = url.searchParams.get('sort') || 'name';
+  const currentOrder = url.searchParams.get('order') || 'asc';
+  const newOrder = (currentSort === field && currentOrder === 'asc') ? 'desc' : 'asc';
+  url.searchParams.set('sort', field);
+  url.searchParams.set('order', newOrder);
+  window.location.href = url.toString();
+}
+
 // ============================================================
-// 14. ADMIN — USER EDIT
+// 12. PAYMENT / CHECKOUT
+// ============================================================
+function copyUpiId() {
+  const el = document.getElementById('upi-id-display');
+  if (!el) return;
+  const text = el.dataset.upi || el.textContent.trim();
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('UPI ID copied!', 'success');
+  }).catch(() => {
+    showToast('Copy failed.', 'danger');
+  });
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Copied!', 'success');
+  });
+}
+
+function copyServerUrl() {
+  const inp = document.getElementById('server-url-input');
+  if (!inp) return;
+  inp.select();
+  inp.setSelectionRange(0, 99999);
+  try {
+    navigator.clipboard.writeText(inp.value).then(() => showToast('URL copied!', 'success'));
+  } catch {
+    document.execCommand('copy');
+    showToast('URL copied!', 'success');
+  }
+}
+
+function selectPayMethod(el) {
+  document.querySelectorAll('.pay-app-btn').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function switchPaymentApp(serverId, appKey) {
+  fetch('/api/payment/switch-app/' + serverId, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ app: appKey })
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        window.location.reload();
+      } else {
+        showToast(data.message || 'Failed.', 'danger');
+      }
+    });
+}
+
+let paymentPollInterval = null;
+function startPaymentPoll(orderId) {
+  if (!orderId) return;
+  const statusEl = document.getElementById('payment-status-text');
+  const statusSub = document.getElementById('payment-status-sub');
+  let attempts = 0;
+  const maxAttempts = 200;
+
+  paymentPollInterval = setInterval(() => {
+    attempts++;
+    if (attempts > maxAttempts) {
+      clearInterval(paymentPollInterval);
+      if (statusEl) statusEl.textContent = '⏰ Payment timeout';
+      if (statusSub) statusSub.textContent = 'Contact support if amount deducted.';
+      return;
+    }
+    fetch('/api/payment/check/' + orderId)
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && data.status === 'paid') {
+          clearInterval(paymentPollInterval);
+          if (statusEl) statusEl.textContent = '✅ Payment Successful!';
+          if (statusSub) statusSub.textContent = 'Balance added. Redirecting...';
+          showToast('Payment successful!', 'success');
+          setTimeout(() => { window.location.href = data.redirect || '/dashboard'; }, 1500);
+        }
+      })
+      .catch(() => {});
+  }, 3000);
+}
+
+function submitTransactionId(orderId) {
+  const inp = document.getElementById('txn-id-input');
+  if (!inp || !inp.value.trim()) {
+    showToast('Please enter transaction ID.', 'warning');
+    return;
+  }
+  const btn = document.getElementById('txn-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+
+  fetch('/api/payment/manual/' + orderId + '/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transaction_id: inp.value.trim() })
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        showToast('Thank you! Payment is being processed.', 'success');
+        const form = document.getElementById('txn-form');
+        const done = document.getElementById('txn-done');
+        if (form) form.style.display = 'none';
+        if (done) done.style.display = 'block';
+        setTimeout(() => { window.location.href = '/dashboard'; }, 3000);
+      } else {
+        showToast(data.message || 'Submit failed.', 'danger');
+        if (btn) { btn.disabled = false; btn.textContent = 'Submit Transaction ID'; }
+      }
+    })
+    .catch(() => {
+      showToast('Network error.', 'danger');
+      if (btn) { btn.disabled = false; btn.textContent = 'Submit Transaction ID'; }
+    });
+}
+
+// ============================================================
+// 13. ADMIN — USER EDIT
 // ============================================================
 function openEditUser(id, name, username, email, bio, projectLimit, role, status, perms, isSuper) {
   const modal = document.getElementById('edit-user-modal');
   if (!modal) return;
   const form = document.getElementById('edit-user-form');
-  if (form) form.action = `/admin/users/${id}/update`;
+  if (form) form.action = '/admin/users/' + id + '/update';
+
   const nameEl = document.getElementById('eu_name'); if (nameEl) nameEl.value = name;
   const userEl = document.getElementById('eu_user'); if (userEl) userEl.value = username;
   const emailEl = document.getElementById('eu_email'); if (emailEl) emailEl.value = email;
   const bioEl = document.getElementById('eu_bio'); if (bioEl) bioEl.value = bio || '';
-  const limEl = document.getElementById('eu_limit'); if (limEl) limEl.value = projectLimit;
+  const coinsEl = document.getElementById('eu_coins'); if (coinsEl) coinsEl.value = projectLimit;
   const passEl = document.getElementById('eu_pass'); if (passEl) passEl.value = '';
+
   const roleEl = document.getElementById('eu_role');
   if (roleEl) {
     roleEl.value = isSuper ? 'super_admin' : role;
     togglePermBlock(roleEl.value);
   }
   const statusEl = document.getElementById('eu_status'); if (statusEl) statusEl.value = status;
+
   if (perms) {
-    const list = perms === 'all' ? ['manage_users','manage_payments','manage_files','manage_settings','manage_announcements','manage_broadcasts','manage_orders','view_logs'] : perms.split(',');
-    ['manage_users','manage_payments','manage_files','manage_settings','manage_announcements','manage_broadcasts','manage_orders','view_logs'].forEach(p => {
+    const list = perms === 'all'
+      ? ['manage_users','manage_coins','manage_files','manage_settings','manage_announcements','manage_broadcasts','manage_orders','view_logs']
+      : perms.split(',');
+    ['manage_users','manage_coins','manage_files','manage_settings','manage_announcements','manage_broadcasts','manage_orders','view_logs'].forEach(p => {
       const el = document.getElementById('p_' + p.replace('manage_', '').replace('view_', ''));
       if (el) el.checked = list.indexOf(p) !== -1;
     });
   }
   modal.style.display = 'flex';
 }
+
 function togglePermBlock(roleVal) {
   const block = document.getElementById('perm-block');
   if (block) block.style.display = (roleVal === 'admin') ? 'block' : 'none';
 }
+
 function closeEditUser() {
   const m = document.getElementById('edit-user-modal');
   if (m) m.style.display = 'none';
 }
 
 // ============================================================
-// 15. ADMIN — LOGO PREVIEW
+// 14. ADMIN — LOGO PREVIEW
 // ============================================================
 function previewLogo(input) {
   if (!input.files || !input.files[0]) return;
@@ -904,10 +983,11 @@ function previewLogo(input) {
   };
   reader.readAsDataURL(input.files[0]);
 }
+
 function handleLogoPreview(input) {
   if (!input.files || !input.files[0]) return;
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = function(e) {
     const mainPreview = document.getElementById('admin_logo_preview');
     const navPreview = document.getElementById('admin_logo_nav_preview');
     if (mainPreview) mainPreview.src = e.target.result;
@@ -920,6 +1000,7 @@ function handleLogoPreview(input) {
   };
   reader.readAsDataURL(input.files[0]);
 }
+
 function previewAvatar(input) {
   if (!input.files || !input.files[0]) return;
   const reader = new FileReader();
@@ -934,18 +1015,12 @@ function previewAvatar(input) {
   reader.readAsDataURL(input.files[0]);
 }
 
-// ============================================================
-// 16. ADMIN — TOGGLE NEW PACKAGE
-// ============================================================
 function toggleNewPkg() {
   const box = document.getElementById('new-pkg-form');
   if (!box) return;
   box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
 }
 
-// ============================================================
-// 17. ADMIN — BROADCAST TARGET
-// ============================================================
 function pickTarget(type) {
   const box = document.getElementById('specific-user');
   const allBox = document.getElementById('t-all');
@@ -963,39 +1038,37 @@ function pickTarget(type) {
 }
 
 // ============================================================
-// 18. ADMIN — PAYMENT SETTINGS
+// 15. KEYBOARD SHORTCUTS
 // ============================================================
-function detectUpiApp(upiId) {
-  if (!upiId) return null;
-  const lower = upiId.toLowerCase();
-  if (lower.includes('@fam')) return 'fampay';
-  if (lower.includes('@ybl') || lower.includes('@ibl') || lower.includes('@axl')) return 'phonepe';
-  if (lower.includes('@okaxis') || lower.includes('@oksbi') || lower.includes('@okicici') || lower.includes('@okhdfcbank')) return 'gpay';
-  if (lower.includes('@paytm') || lower.includes('@ptaxis') || lower.includes('@ptyes')) return 'paytm';
-  if (lower.includes('@apl')) return 'amazonpay';
-  if (lower.includes('@upi')) return 'bhim';
-  return 'other';
-}
-function onUpiInput(input, appKey) {
-  const app = detectUpiApp(input.value);
-  const infoEl = document.getElementById('detected_' + appKey);
-  if (infoEl) {
-    if (app) {
-      infoEl.textContent = '✓ Detected: ' + app.charAt(0).toUpperCase() + app.slice(1);
-      infoEl.style.color = '#10B981';
-    } else {
-      infoEl.textContent = '';
-    }
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay').forEach(m => {
+      if (m.style.display === 'flex') m.style.display = 'none';
+    });
+    document.querySelectorAll('.dd-wrap.open').forEach(w => w.classList.remove('open'));
   }
-}
+});
 
 // ============================================================
-// 19. TRIAL COUNTDOWN
+// 16. FLASH AUTO-DISMISS
+// ============================================================
+setTimeout(function() {
+  document.querySelectorAll('.flash').forEach(f => {
+    f.style.transition = 'all 0.4s ease';
+    f.style.opacity = '0';
+    f.style.transform = 'translateY(-10px)';
+    setTimeout(() => f.remove(), 400);
+  });
+}, 5000);
+
+// ============================================================
+// 17. TRIAL COUNTDOWN
 // ============================================================
 function startTrialCountdown(expiresAt) {
   const el = document.getElementById('trial-timer');
   if (!el || !expiresAt) return;
   const target = new Date(expiresAt.replace(' ', 'T') + 'Z').getTime();
+
   function tick() {
     const now = Date.now();
     const diff = target - now;
@@ -1016,58 +1089,45 @@ function startTrialCountdown(expiresAt) {
 }
 
 // ============================================================
-// 20. KEYBOARD SHORTCUTS
+// 18. INIT ON LOAD
 // ============================================================
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    document.querySelectorAll('.modal-overlay').forEach(m => {
-      if (m.style.display === 'flex') m.style.display = 'none';
-    });
-    document.querySelectorAll('.dd-wrap.open').forEach(w => w.classList.remove('open'));
-  }
-});
-
-// ============================================================
-// 21. FLASH AUTO-DISMISS
-// ============================================================
-setTimeout(() => {
-  document.querySelectorAll('.flash').forEach(f => {
-    f.style.transition = 'all 0.4s ease';
-    f.style.opacity = '0';
-    f.style.transform = 'translateY(-10px)';
-    setTimeout(() => f.remove(), 400);
-  });
-}, 5000);
-
-// ============================================================
-// 22. INIT ON PAGE LOAD
-// ============================================================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
   // Trial countdown
   const trialEl = document.getElementById('trial-timer');
   if (trialEl && trialEl.dataset.expires) {
     startTrialCountdown(trialEl.dataset.expires);
   }
-  // Payment poll — but wait for a bit to let user see the QR
+
+  // Payment poll
   const payPollEl = document.getElementById('payment-poll-order');
   if (payPollEl && payPollEl.dataset.orderId) {
-    // Start polling after 5 seconds (user has time to see QR)
-    setTimeout(() => startPaymentPoll(payPollEl.dataset.orderId), 5000);
+    startPaymentPoll(payPollEl.dataset.orderId);
   }
-  // Notification poll
-  if (document.getElementById('notif-list')) {
-    loadNotifications();
-    setInterval(loadNotifications, 30000);
+
+  // Bulk checkbox bar
+  document.querySelectorAll('.fm-table-row .fm-checkbox').forEach(cb => {
+    cb.addEventListener('change', function() {
+      const row = this.closest('.fm-table-row');
+      if (row) row.classList.toggle('selected', this.checked);
+      updateBulkBar();
+    });
+  });
+
+  // Search input
+  const searchInput = document.getElementById('fm-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', filterFiles);
   }
-  // Live log stream
-  const terminal = document.getElementById('terminal');
-  if (terminal && terminal.dataset.serverId) {
-    startLogStream(terminal.dataset.serverId, terminal.dataset.startTime || 0);
+
+  // File manager search filter on page
+  const fmSearch = document.querySelector('.fm-search input');
+  if (fmSearch) {
+    fmSearch.addEventListener('input', filterFiles);
   }
 });
 
 // ============================================================
-// 23. EXPOSE TO WINDOW
+// 19. EXPOSE TO WINDOW
 // ============================================================
 window.showToast = showToast;
 window.toggleDropdown = toggleDropdown;
@@ -1083,20 +1143,10 @@ window.fpSubmitReset = fpSubmitReset;
 window.serverAction = serverAction;
 window.startLogStream = startLogStream;
 window.clearLogs = clearLogs;
-window.copyServerUrl = copyServerUrl;
-window.deleteServer = deleteServer;
 window.quickCommand = quickCommand;
 window.sendTerminalCommand = sendTerminalCommand;
 window.clearTerminal = clearTerminal;
-window.openRenewModal = openRenewModal;
-window.closeRenewModal = closeRenewModal;
-window.updateRenewButton = updateRenewButton;
-window.continueRenew = continueRenew;
-window.copyUpiId = copyUpiId;
-window.copyText = copyText;
-window.selectPayMethod = selectPayMethod;
-window.openUpiApp = openUpiApp;
-window.submitTransactionId = submitTransactionId;
+window.submitRenew = submitRenew;
 window.uploadFile = uploadFile;
 window.promptFolder = promptFolder;
 window.promptFile = promptFile;
@@ -1105,6 +1155,16 @@ window.saveEditor = saveEditor;
 window.deleteItem = deleteItem;
 window.renameItem = renameItem;
 window.unzipItem = unzipItem;
+window.toggleSelectAll = toggleSelectAll;
+window.bulkDelete = bulkDelete;
+window.filterFiles = filterFiles;
+window.sortFiles = sortFiles;
+window.copyUpiId = copyUpiId;
+window.copyText = copyText;
+window.copyServerUrl = copyServerUrl;
+window.selectPayMethod = selectPayMethod;
+window.switchPaymentApp = switchPaymentApp;
+window.submitTransactionId = submitTransactionId;
 window.openEditUser = openEditUser;
 window.togglePermBlock = togglePermBlock;
 window.closeEditUser = closeEditUser;
@@ -1113,5 +1173,5 @@ window.handleLogoPreview = handleLogoPreview;
 window.previewAvatar = previewAvatar;
 window.toggleNewPkg = toggleNewPkg;
 window.pickTarget = pickTarget;
-window.detectUpiApp = detectUpiApp;
-window.onUpiInput = onUpiInput;
+window.startTrialCountdown = startTrialCountdown;
+window.updateBulkBar = updateBulkBar;
