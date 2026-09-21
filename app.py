@@ -557,6 +557,33 @@ def stop_server_process(server_id):
         except Exception:
             try: proc.kill()
             except Exception: pass
+    
+    # ✅ Terminal processes bhi band karo
+    term_procs = TERMINAL_PROCS.pop(server_id, [])
+    for tp in term_procs:
+        try:
+            if hasattr(os, 'killpg'):
+                os.killpg(os.getpgid(tp.pid), signal.SIGTERM)
+            else:
+                tp.terminate()
+            tp.wait(timeout=2)
+        except Exception:
+            try: tp.kill()
+            except Exception: pass
+    
+    # ✅ Terminal sessions bhi clean karo
+    for sid in list(TERMINAL_SESSIONS.keys()):
+        try:
+            proc = TERMINAL_SESSIONS[sid]['proc']
+            if proc.poll() is None:
+                if hasattr(os, 'killpg'):
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                else:
+                    proc.terminate()
+            del TERMINAL_SESSIONS[sid]
+        except Exception:
+            pass
+    
     SERVER_START_TIMES.pop(server_id, None)
     row = db.execute("SELECT pid FROM servers WHERE id=?", (server_id,)).fetchone()
     if row and row['pid']:
@@ -631,16 +658,23 @@ def start_server_process(server_id):
         db.execute("UPDATE servers SET status='running', pid=?, runtime=? WHERE id=?", (proc.pid, runtime, server_id))
         db.commit()
         write_server_log(server_id, 'INFO', f"Started (PID {proc.pid}) — {runtime}")
-        # URL print (only when running)
-        base_url = request.url_root.rstrip('/') if request else 'http://localhost:3000'
-        srv_row = db.execute("SELECT slug FROM servers WHERE id=?", (server_id,)).fetchone()
-        if srv_row and srv_row['slug']:
-            srv_url = f"{base_url}/{srv_row['slug']}/"
-            write_server_log(server_id, 'SUCCESS', '━' * 40)
-            write_server_log(server_id, 'SUCCESS', '🎉 SERVER IS RUNNING')
-            write_server_log(server_id, 'SUCCESS', f'🌐 URL: {srv_url}')
-            write_server_log(server_id, 'SUCCESS', '━' * 40)
-        return True, f"Running on port {user_port}", [], False
+        # Sirf web projects ke liye URL dikhao
+is_web = runtime in ('flask', 'fastapi', 'django', 'static', 'nodejs', 'php')
+if is_web:
+    base_url = request.url_root.rstrip('/') if request else 'http://localhost:3000'
+    srv_row = db.execute("SELECT slug FROM servers WHERE id=?", (server_id,)).fetchone()
+    if srv_row and srv_row['slug']:
+        srv_url = f"{base_url}/{srv_row['slug']}/"
+        write_server_log(server_id, 'SUCCESS', '━' * 40)
+        write_server_log(server_id, 'SUCCESS', '🎉 SERVER IS RUNNING')
+        write_server_log(server_id, 'SUCCESS', f'🌐 URL: {srv_url}')
+        write_server_log(server_id, 'SUCCESS', '━' * 40)
+else:
+    write_server_log(server_id, 'SUCCESS', '━' * 40)
+    write_server_log(server_id, 'SUCCESS', '✅ RUNNING')
+    write_server_log(server_id, 'SUCCESS', f'📋 PID: {proc.pid}')
+    write_server_log(server_id, 'SUCCESS', '━' * 40)
+return True, f"Running (PID {proc.pid})", [], False
     except Exception as e:
         write_server_log(server_id, 'ERROR', f"Launch failed: {e}")
         db.execute("UPDATE servers SET status='error', pid=0 WHERE id=?", (server_id,)); db.commit()
@@ -1040,9 +1074,12 @@ def server_manage(server_id):
     sdir = get_server_dir(server['user_id'], server_id)
     scan = scan_project(sdir)
     base_url = request.url_root.rstrip('/')
-    server_url = f"{base_url}/{server['slug']}/" if (server['slug'] and server['status'] == 'running') else ''
-    return render_template_string(SERVER_MANAGE_HTML, server=server, scan=scan,
-        remaining_days=rd, remaining_hours=rh, start_time=st, server_url=server_url)
+is_web = server['runtime'] in ('flask', 'fastapi', 'django', 'static', 'nodejs', 'php')
+server_url = ''
+if is_web and server['slug'] and server['status'] == 'running':
+    server_url = f"{base_url}/{server['slug']}/"
+return render_template_string(SERVER_MANAGE_HTML, server=server, scan=scan,
+    remaining_days=rd, remaining_hours=rh, start_time=st, server_url=server_url)
 
 @app.route('/api/servers/<int:server_id>/action', methods=['POST'])
 @login_required
@@ -1138,6 +1175,10 @@ def clear_logs(server_id):
         return jsonify({'success': True, 'message': 'Logs cleared.'})
     except Exception as e: return jsonify({'success': False, 'message': str(e)}), 500
 
+# Terminal background processes + interactive sessions store karne ke liye
+TERMINAL_PROCS = {}       # server_id -> list of Popen
+TERMINAL_SESSIONS = {}    # session_id -> {'proc': Popen, 'buffer': str, 'cmd': str}
+
 @app.route('/api/servers/<int:server_id>/terminal', methods=['POST'])
 @login_required
 def server_terminal(server_id):
@@ -1145,23 +1186,149 @@ def server_terminal(server_id):
     if not server: return jsonify({'success': False, 'message': 'Not found'}), 404
     data = request.get_json() or {}
     cmd = (data.get('command') or '').strip()
+    session_id = (data.get('session_id') or '').strip()
+    input_data = data.get('input')  # Interactive input ke liye
+    
+    # ✅ Agar session_id hai — matlab input bhej raha hai existing session ko
+    if session_id and session_id in TERMINAL_SESSIONS:
+        sess = TERMINAL_SESSIONS[session_id]
+        proc = sess['proc']
+        if proc.poll() is not None:
+            # Process khatam ho chuka
+            output = sess['buffer']
+            del TERMINAL_SESSIONS[session_id]
+            return jsonify({
+                'success': True,
+                'output': output,
+                'running': False,
+                'code': proc.returncode,
+                'session_id': session_id
+            })
+        if input_data is not None:
+            try:
+                proc.stdin.write(input_data + '\n')
+                proc.stdin.flush()
+            except Exception as e:
+                return jsonify({'success': False, 'message': f'Input write failed: {e}'})
+        time.sleep(0.5)
+        return jsonify({
+            'success': True,
+            'output': sess['buffer'],
+            'running': proc.poll() is None,
+            'code': proc.poll() if proc.poll() is not None else -1,
+            'session_id': session_id
+        })
+    
+    # Naya command — session_id nahi hai
     if not cmd: return jsonify({'success': False, 'message': 'Command required'})
     blocked = ['rm -rf /', 'shutdown', 'reboot', 'mkfs', 'dd if=', ':(){:|:&};:']
     for b in blocked:
         if b in cmd: return jsonify({'success': False, 'message': 'Command blocked'}), 403
+    
     sdir = get_server_dir(server['user_id'], server_id)
     pdir = os.path.join(sdir, 'packages')
     env = os.environ.copy()
     env['PYTHONPATH'] = f"{sdir}:{pdir}:" + env.get('PYTHONPATH','')
     env['PORT'] = str(server['port'] or 5001)
+    env['PYTHONUNBUFFERED'] = '1'
+    env['TERM'] = 'dumb'  # ✅ ANSI colors minimal
+    
     try:
-        result = subprocess.run(cmd, shell=True, cwd=sdir, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=60)
-        out = result.stdout or '(no output)'
-        return jsonify({'success': True, 'output': out[:10000], 'code': result.returncode})
-    except subprocess.TimeoutExpired:
-        return jsonify({'success': False, 'message': 'Timeout (60s)'}), 408
+        # ✅ Background process — stdin PIPE (interactive support)
+        kwargs = {}
+        if hasattr(os, 'setsid'):
+            kwargs['preexec_fn'] = os.setsid
+        
+        proc = subprocess.Popen(
+            cmd, shell=True, cwd=sdir, env=env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True, bufsize=1,
+            **kwargs
+        )
+        
+        # Store in TERMINAL_PROCS (for STOP button)
+        if server_id not in TERMINAL_PROCS:
+            TERMINAL_PROCS[server_id] = []
+        TERMINAL_PROCS[server_id].append(proc)
+        
+        # New session banao
+        new_sid = secrets.token_hex(8)
+        TERMINAL_SESSIONS[new_sid] = {
+            'proc': proc,
+            'buffer': '',
+            'cmd': cmd
+        }
+        
+        # Background mein output read karo
+        def _reader(sid, p):
+            try:
+                while True:
+                    line = p.stdout.readline()
+                    if not line:
+                        break
+                    TERMINAL_SESSIONS[sid]['buffer'] += line
+                    if len(TERMINAL_SESSIONS[sid]['buffer']) > 50000:
+                        TERMINAL_SESSIONS[sid]['buffer'] = TERMINAL_SESSIONS[sid]['buffer'][-30000:]
+            except Exception:
+                pass
+        
+        threading.Thread(target=_reader, args=(new_sid, proc), daemon=True).start()
+        
+        # Thoda wait karo output ke liye
+        time.sleep(1.2)
+        
+        sess = TERMINAL_SESSIONS.get(new_sid, {'buffer': '(no output)', 'proc': proc})
+        return jsonify({
+            'success': True,
+            'output': sess['buffer'],
+            'running': proc.poll() is None,
+            'code': proc.poll() if proc.poll() is not None else -1,
+            'pid': proc.pid,
+            'session_id': new_sid
+        })
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/servers/<int:server_id>/terminal/poll', methods=['POST'])
+@login_required
+def server_terminal_poll(server_id):
+    """Session ka latest output poll karo"""
+    data = request.get_json() or {}
+    sid = data.get('session_id', '')
+    if sid not in TERMINAL_SESSIONS:
+        return jsonify({'success': False, 'message': 'Session not found'})
+    sess = TERMINAL_SESSIONS[sid]
+    proc = sess['proc']
+    return jsonify({
+        'success': True,
+        'output': sess['buffer'],
+        'running': proc.poll() is None,
+        'code': proc.poll() if proc.poll() is not None else -1
+    })
+
+
+@app.route('/api/servers/<int:server_id>/terminal/close', methods=['POST'])
+@login_required
+def server_terminal_close(server_id):
+    """Session band karo"""
+    data = request.get_json() or {}
+    sid = data.get('session_id', '')
+    if sid in TERMINAL_SESSIONS:
+        sess = TERMINAL_SESSIONS[sid]
+        try:
+            proc = sess['proc']
+            if proc.poll() is None:
+                if hasattr(os, 'killpg'):
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                else:
+                    proc.terminate()
+        except Exception:
+            pass
+        del TERMINAL_SESSIONS[sid]
+    return jsonify({'success': True})
 
 @app.route('/account', methods=['GET', 'POST'])
 @login_required
@@ -2011,15 +2178,15 @@ def _script():
 # ============================================================
 BASE_HTML = r"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>{% block title %}{{ vip_site_name }}{% endblock %}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"><link rel="stylesheet" href="/style.css">{% if site_logo_url %}<link rel="icon" href="{{ site_logo_url }}">{% endif %}</head><body><div id="loader" class="loader-screen"><div class="loader-box"><div class="loader-spinner"></div><div class="loader-title">{{ site_name }}</div></div></div>{% if is_impersonating %}<div class="impersonate-banner"><span>🛡️ Support Mode: <b>{{ current_user.username }}</b></span><a href="{{ url_for('stop_impersonating') }}" class="btn-xs">Return to Admin</a></div>{% endif %}<header class="topnav"><div class="wrap topnav-inner"><a href="{{ url_for('dashboard') if current_user else url_for('home') }}" class="brand"><div class="brand-icon">{% if site_logo_url %}<img src="{{ site_logo_url }}" alt="" onerror="this.style.display='none';this.parentNode.textContent='⚡';">{% else %}⚡{% endif %}</div><span>{{ site_name }}</span></a><nav class="desktop-nav">{% if current_user %}<a href="{{ url_for('dashboard') }}" class="dlink">Dashboard</a><a href="{{ url_for('packages') }}" class="dlink">Packages</a><a href="{{ url_for('account') }}" class="dlink">Account</a>{% if is_admin %}<a href="{{ url_for('admin_dashboard') }}" class="dlink admin-link">👑 Admin</a>{% endif %}{% else %}<a href="{{ url_for('home') }}" class="dlink">Home</a><a href="{{ url_for('signin') }}" class="dlink">Sign In</a>{% endif %}</nav><div class="header-actions">{% if current_user %}{% if trial_active %}<span class="plan-pill">🎁 {{ trial_hours_left }}h Trial</span>{% elif current_user.plan_id %}<span class="plan-pill">✅ {{ access_msg }}</span>{% endif %}<div class="dd-wrap"><button class="dd-trigger bell-btn" onclick="toggleDropdown(event, this)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span id="notif-badge" class="nbadge" style="display:none;">0</span></button><div class="dd-popover notif-pop"><div class="notif-head"><span>🔔 Notifications</span><button onclick="clearAllNotifs(event)" class="link-btn">Clear All</button></div><div id="notif-list" class="notif-body"><div class="empty-mini">Loading...</div></div></div></div><div class="dd-wrap"><button class="dd-trigger avatar-btn" onclick="toggleDropdown(event, this)">{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="">{% else %}{{ (current_user.full_name or current_user.username)[0]|upper }}{% endif %}</button><div class="dd-popover"><div class="user-mini"><div class="avatar-mini">{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="">{% else %}{{ (current_user.full_name or current_user.username)[0]|upper }}{% endif %}</div><div class="um-info"><b>{{ current_user.full_name }}</b><span>@{{ current_user.username }}</span></div></div><a href="{{ url_for('dashboard') }}" class="dd-item">📊 Dashboard</a><a href="{{ url_for('account') }}" class="dd-item">⚙️ Account</a><a href="{{ url_for('packages') }}" class="dd-item">📦 Packages</a>{% if is_admin %}<a href="{{ url_for('admin_dashboard') }}" class="dd-item admin-link">👑 Admin</a>{% endif %}<div class="dd-divider"></div><a href="{{ url_for('signout') }}" class="dd-item danger">🚪 Sign Out</a></div></div>{% else %}<a href="{{ url_for('signin') }}" class="btn-primary btn-sm">Sign In</a>{% endif %}</div></div></header>{% with msgs = get_flashed_messages(with_categories=true) %}{% if msgs %}<div class="wrap" style="margin-top:8px;">{% for cat, msg in msgs %}<div class="flash flash-{{ cat }}"><span>{% if cat=='success' %}✓{% elif cat=='danger' %}✕{% elif cat=='warning' %}⚠{% else %}ℹ{% endif %}</span><span>{{ msg }}</span><button onclick="this.parentElement.remove()" class="flash-x">&times;</button></div>{% endfor %}</div>{% endif %}{% endwith %}<main>{% block content %}{% endblock %}</main>{% if current_user and request.endpoint not in ['server_manage','file_manager'] %}<nav class="bottomnav">{% if request.endpoint and 'admin' in request.endpoint %}<a href="{{ url_for('admin_dashboard') }}" class="bn-item"><span>👑</span>Admin</a><a href="{{ url_for('admin_orders') }}" class="bn-item"><span>💳</span>Orders</a><a href="{{ url_for('admin_users') }}" class="bn-item"><span>👥</span>Users</a><a href="{{ url_for('admin_settings') }}" class="bn-item"><span>⚙️</span>Settings</a>{% else %}<a href="{{ url_for('dashboard') }}" class="bn-item"><span>⚡</span>Home</a><a href="{{ url_for('packages') }}" class="bn-item"><span>📦</span>Plans</a><a href="{{ url_for('account') }}" class="bn-item"><span>👤</span>Account</a>{% endif %}</nav>{% endif %}<div id="toasts"></div><script src="/script.js"></script>{% block scripts %}{% endblock %}</body></html>"""
 
-HOME_HTML = """{% extends "base" %}{% block title %}{{ vip_site_name }}{% endblock %}{% block content %}<div class="wrap"><section class="hero-card"><div class="hero-badge">🚀 PYTHON HOSTING PLATFORM</div><div class="hero-logo">{% if site_logo_url %}<img src="{{ site_logo_url }}" alt="">{% else %}⚡{% endif %}</div><h1 class="hero-title">{{ vip_site_name }}</h1><p class="hero-sub">Fast • Secure • 24/7 Uptime</p><p class="hero-desc">Deploy Python, Node.js, PHP, Java, Go, and 50+ languages. Real-time logs, file manager, auto-package installer.</p><div class="hero-actions">{% if current_user %}<a href="{{ url_for('dashboard') }}" class="btn-primary btn-lg">⚡ Enter Dashboard</a>{% else %}<a href="{{ url_for('signup') }}" class="btn-primary btn-lg">{% if trial_enabled %}Start Free Trial ({{ trial_hours }}h) →{% else %}Create Free Account →{% endif %}</a><a href="{{ url_for('signin') }}" class="btn-secondary btn-lg">Sign In</a>{% endif %}</div><div class="hero-stats"><div>🟢 99.9% Uptime</div><div>⚡ 50+ Languages</div><div>🛟 24x7 Support</div></div></section><section class="section"><div class="section-head"><h2 class="section-title">Choose Your Plan</h2><p class="section-desc">Simple pricing. No hidden fees.</p></div><div class="grid grid-3">{% for pkg in packages %}{% if pkg.is_trial and trial_enabled %}<div class="pkg-card pkg-trial"><div class="pkg-ribbon pkg-ribbon-trial">🎁 FREE TRIAL</div><h3>{{ pkg.name }}</h3><div class="pkg-price-block"><span class="pkg-price" style="color:#10B981;">₹0</span><span class="pkg-period">/ {{ pkg.trial_hours }} hours</span></div><ul class="pkg-list">{% for f in pkg.features.split(',') %}<li>{{ f.strip() }}</li>{% endfor %}</ul><a href="{{ url_for('signup') }}" class="btn-success btn-block">Start Free Trial →</a></div>{% elif not pkg.is_trial %}<div class="pkg-card {% if pkg.is_popular %}pkg-featured{% endif %}">{% if pkg.is_popular %}<div class="pkg-ribbon">⭐ POPULAR</div>{% endif %}<h3>{{ pkg.name }}</h3><div class="pkg-price-block"><span class="pkg-price">₹{{ pkg.price }}</span><span class="pkg-period">/ {{ pkg.days }} days</span></div><ul class="pkg-list">{% for f in pkg.features.split(',') %}<li>{{ f.strip() }}</li>{% endfor %}</ul>{% if current_user %}<a href="{{ url_for('buy_redirect', pkg_id=pkg.id) }}" class="btn-primary btn-block">Buy Now → ₹{{ pkg.price }}</a>{% else %}<a href="{{ url_for('signup') }}" class="btn-primary btn-block">Buy Now → ₹{{ pkg.price }}</a>{% endif %}</div>{% endif %}{% endfor %}</div></section><section class="cta-card"><h2>Ready to Deploy?</h2><p>Start with a free trial. No credit card required.</p>{% if not current_user %}<a href="{{ url_for('signup') }}" class="btn-primary btn-lg">Create Free Account →</a>{% else %}<a href="{{ url_for('create_server') }}" class="btn-primary btn-lg">+ Create Project</a>{% endif %}</section></div>{% endblock %}"""
+HOME_HTML = """{% extends "base" %}{% block title %}{{ vip_site_name }}{% endblock %}{% block content %}<div class="wrap"><section class="hero-card"><div class="hero-badge">🚀 PYTHON HOSTING PLATFORM</div><div class="hero-logo">{% if site_logo_url %}<img src="{{ site_logo_url }}" alt="">{% else %}⚡{% endif %}</div><h1 class="hero-title">{{ vip_site_name }}</h1><p class="hero-sub">Fast • Secure • 24/7 Uptime</p><p class="hero-desc">Deploy Python, Node.js, PHP, Java, Go, and 50+ languages. Real-time logs, file manager, auto-package installer.</p><div class="hero-actions">{% if current_user %}<a href="{{ url_for('dashboard') }}" class="btn-primary btn-lg">⚡ Enter Dashboard</a>{% else %}<a href="{{ url_for('signup') }}" class="btn-primary btn-lg">{% if trial_enabled %}Start Free Trial ({{ trial_hours }}h) →{% else %}Create Free Account →{% endif %}</a><a href="{{ url_for('signin') }}" class="btn-secondary btn-lg">Sign In</a>{% endif %}</div><div class="hero-stats"><div>🟢 99.9% Uptime</div><div>⚡ 50+ Languages</div><div>🛟 24x7 Support</div></div></section><section class="section"><div class="section-head"><h2 class="section-title">Choose Your Plan</h2><p class="section-desc">Simple pricing. No hidden fees.</p></div><div class="grid grid-3">{% for pkg in packages %}{% if pkg.is_trial and trial_enabled and not is_admin %}<div class="pkg-card pkg-trial"><div class="pkg-ribbon pkg-ribbon-trial">🎁 FREE TRIAL</div><h3>{{ pkg.name }}</h3><div class="pkg-price-block"><span class="pkg-price" style="color:#10B981;">₹0</span><span class="pkg-period">/ {{ pkg.trial_hours }} hours</span></div><ul class="pkg-list">{% for f in pkg.features.split(',') %}<li>{{ f.strip() }}</li>{% endfor %}</ul><a href="{{ url_for('signup') }}" class="btn-success btn-block">Start Free Trial →</a></div>{% elif not pkg.is_trial %}<div class="pkg-card {% if pkg.is_popular %}pkg-featured{% endif %}">{% if pkg.is_popular %}<div class="pkg-ribbon">⭐ POPULAR</div>{% endif %}<h3>{{ pkg.name }}</h3><div class="pkg-price-block"><span class="pkg-price">₹{{ pkg.price }}</span><span class="pkg-period">/ {{ pkg.days }} days</span></div><ul class="pkg-list">{% for f in pkg.features.split(',') %}<li>{{ f.strip() }}</li>{% endfor %}</ul>{% if current_user %}<a href="{{ url_for('buy_redirect', pkg_id=pkg.id) }}" class="btn-primary btn-block">Buy Now → ₹{{ pkg.price }}</a>{% else %}<a href="{{ url_for('signup') }}" class="btn-primary btn-block">Buy Now → ₹{{ pkg.price }}</a>{% endif %}</div>{% endif %}{% endfor %}</div></section><section class="cta-card"><h2>Ready to Deploy?</h2><p>Start with a free trial. No credit card required.</p>{% if not current_user %}<a href="{{ url_for('signup') }}" class="btn-primary btn-lg">Create Free Account →</a>{% else %}<a href="{{ url_for('create_server') }}" class="btn-primary btn-lg">+ Create Project</a>{% endif %}</section></div>{% endblock %}"""
 
 SIGNIN_HTML = """{% extends "base" %}{% block title %}Sign In{% endblock %}{% block content %}<div class="auth-wrap"><div class="auth-card"><div class="auth-head"><div class="auth-logo">{% if site_logo_url %}<img src="{{ site_logo_url }}" alt="">{% else %}⚡{% endif %}</div><h1>Welcome Back 👋</h1><p>Sign in to continue</p></div><form method="POST" action="{{ url_for('signin') }}"><div class="field"><label>Email or Username</label><input type="text" name="email" value="{{ email or '' }}" placeholder="you@gmail.com" required autocomplete="username"></div><div class="field"><label>Password</label><div class="pass-wrap"><input type="password" name="password" id="signin-pass" placeholder="••••••••" required autocomplete="current-password"><button type="button" class="pass-toggle" onclick="togglePass('signin-pass', this)">👁️</button></div></div><div class="auth-row"><label class="check"><input type="checkbox" name="remember" checked><span>Remember me</span></label><a href="javascript:void(0)" onclick="openForgotModal()" class="link-sm">Forgot password?</a></div><button type="submit" class="btn-primary btn-block btn-lg">Sign In</button></form><div class="auth-foot">Don't have an account? <a href="{{ url_for('signup') }}">Create one</a></div></div></div><div id="forgot-modal" class="modal-overlay" style="display:none;"><div class="modal-card" style="max-width:420px;"><button class="modal-x" onclick="closeForgotModal()">&times;</button><h2 style="font-size:1.2rem;font-weight:800;margin:0 0 4px;">Reset Password</h2><div class="step-badges"><div class="stepb" id="sb1"><span>1</span>Challenge</div><div class="stepb" id="sb2"><span>2</span>Email</div><div class="stepb" id="sb3"><span>3</span>Password</div></div><div id="fp-step1"><div class="captcha-box" id="fp-captcha">Loading...</div><div class="field"><label>Your Answer</label><input type="number" id="fp-captcha-answer"><div id="fp-cap-err" class="inline-err" style="display:none;"></div></div><button type="button" onclick="fpSubmitCaptcha()" class="btn-primary btn-block">Verify →</button></div><div id="fp-step2" style="display:none;"><div class="field"><label>Registered Gmail</label><input type="email" id="fp-email"><div id="fp-email-err" class="inline-err" style="display:none;"></div></div><button type="button" onclick="fpSubmitEmail()" class="btn-primary btn-block">Verify →</button></div><div id="fp-step3" style="display:none;"><div class="field"><label>New Password</label><input type="password" id="fp-new-pass"></div><div class="field"><label>Confirm</label><input type="password" id="fp-conf-pass"><div id="fp-pw-err" class="inline-err" style="display:none;"></div></div><button type="button" onclick="fpSubmitReset()" class="btn-success btn-block">Change Password ✓</button></div></div></div>{% endblock %}"""
 
 SIGNUP_HTML = """{% extends "base" %}{% block title %}Sign Up{% endblock %}{% block content %}<div class="auth-wrap"><div class="auth-card"><div class="auth-head"><div class="auth-logo">{% if site_logo_url %}<img src="{{ site_logo_url }}" alt="">{% else %}⚡{% endif %}</div><h1>Create Account</h1><p>Join and get free trial</p></div><form method="POST" action="{{ url_for('signup') }}"><div class="field"><label>Full Name</label><input type="text" name="full_name" value="{{ full_name or '' }}" placeholder="John Doe" required></div><div class="field"><label>Username</label><input type="text" name="username" value="{{ username or '' }}" placeholder="johndoe" required minlength="3"></div><div class="field"><label>Gmail Address</label><input type="email" name="email" value="{{ email or '' }}" placeholder="you@gmail.com" required><small>Only @gmail.com</small></div><div class="field"><label>Password</label><div class="pass-wrap"><input type="password" name="password" id="su-pass" placeholder="Min 6 characters" required minlength="6"><button type="button" class="pass-toggle" onclick="togglePass('su-pass', this)">👁️</button></div></div><div class="field"><label>Confirm Password</label><div class="pass-wrap"><input type="password" name="confirm_password" id="su-cpass" placeholder="Repeat password" required minlength="6"><button type="button" class="pass-toggle" onclick="togglePass('su-cpass', this)">👁️</button></div></div><button type="submit" class="btn-primary btn-block btn-lg">Create Account</button></form><div class="auth-foot">Already have an account? <a href="{{ url_for('signin') }}">Sign in</a></div></div></div>{% endblock %}"""
 
-DASHBOARD_HTML = """{% extends "base" %}{% block title %}Dashboard{% endblock %}{% block content %}<div class="wrap"><div class="welcome-card"><div class="welcome-avatar">{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="">{% else %}{{ (current_user.full_name or current_user.username)[0]|upper }}{% endif %}</div><div><div class="welcome-hi">Welcome back,</div><h1 class="welcome-name">{{ current_user.full_name }}</h1><div class="status-live"><span class="dot-live"></span>Active Account</div></div></div>{% if trial_active %}<div class="trial-countdown"><div class="trial-countdown-icon">🎁</div><div class="trial-countdown-info"><div class="trial-countdown-title">FREE TRIAL ACTIVE</div><div class="trial-countdown-timer" id="trial-timer" data-expires="{{ current_user.trial_expires_at }}">--:--:--</div></div><a href="{{ url_for('packages') }}" class="btn-primary btn-sm">Upgrade →</a></div>{% elif current_user.plan_id and has_access %}<div class="plan-status-card plan-active"><div class="plan-header"><span class="plan-name-badge active">✅ PLAN ACTIVE</span></div><h2 class="plan-title">{{ access_msg }}</h2><div class="plan-meta-row"><span>Projects: {{ servers|length }} / {% if current_user.project_limit == -1 %}∞{% else %}{{ current_user.project_limit }}{% endif %}</span></div><div class="plan-actions"><a href="{{ url_for('packages') }}" class="btn-secondary btn-sm">⬆️ Upgrade</a></div></div>{% elif not is_admin %}<div class="plan-status-card plan-none"><div class="plan-header"><span class="plan-name-badge none">⚠️ NO PLAN</span></div><h2 class="plan-title">Purchase a Plan</h2><p class="muted">To create projects, you need an active plan.</p><div class="plan-actions"><a href="{{ url_for('packages') }}" class="btn-primary">🚀 View Plans →</a></div></div>{% endif %}{% if announcements %}<div class="ann-stack">{% for a in announcements %}<div class="ann-card ann-{{ a.type }} {% if a.pinned %}ann-pinned{% endif %}"><div class="ann-head"><div class="ann-badges">{% if a.pinned %}<span class="badge badge-warn">📌 PINNED</span>{% endif %}<strong>{{ a.title }}</strong></div><span class="ann-date">{{ a.created_at|format_date }}</span></div><p class="ann-body">{{ a.content }}</p></div>{% endfor %}</div>{% endif %}<div class="section-head-row"><div><h2 class="section-title" style="margin:0;">My Projects ({{ servers|length }})</h2><p class="section-desc">{{ limit_msg }}</p></div>{% if can_create %}<a href="{{ url_for('create_server') }}" class="btn-primary">+ Create Project</a>{% else %}<a href="{{ url_for('packages') }}" class="btn-primary">⬆️ Upgrade to Create</a>{% endif %}</div>{% if servers %}<div class="grid grid-2">{% for s in servers %}<div class="server-card server-{{ s.status }}"><div class="server-top"><div class="server-id"><div class="server-icon">🐍</div><div><h3>{{ s.name }}</h3><span class="server-py">{{ s.runtime }}</span></div></div>{% if s.status == 'running' %}<span class="status status-running"><span class="dot"></span> Running</span>{% elif s.status == 'expired' %}<span class="status status-expired"><span class="dot"></span> Expired</span>{% else %}<span class="status status-stopped"><span class="dot"></span> Stopped</span>{% endif %}</div><div class="server-info"><div><span>Entry:</span><b>{{ s.entry_file or 'Not set' }}</b></div><div><span>Created:</span><span>{{ s.created_at|format_date }}</span></div><div><span>Expires:</span><b>{{ s.expires_at|format_date }}</b></div></div><a href="{{ url_for('server_manage', server_id=s.id) }}" class="btn-primary btn-block">⚙️ Manage Server</a></div>{% endfor %}</div>{% else %}<div class="empty-card"><div style="font-size:3rem;">🚀</div><h3>No Projects Yet</h3><p>Create your first project.</p><a href="{{ url_for('create_server') }}" class="btn-primary">+ Create Project</a></div>{% endif %}</div>{% endblock %}"""
+DASHBOARD_HTML = """{% extends "base" %}{% block title %}Dashboard{% endblock %}{% block content %}<div class="wrap"><div class="welcome-card"><div class="welcome-avatar">{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="">{% else %}{{ (current_user.full_name or current_user.username)[0]|upper }}{% endif %}</div><div><div class="welcome-hi">Welcome back,</div><h1 class="welcome-name">{{ current_user.full_name }}</h1><div class="status-live"><span class="dot-live"></span>Active Account</div></div></div>{% if is_admin %}{% elif trial_active %}<div class="trial-countdown"><div class="trial-countdown-icon">🎁</div><div class="trial-countdown-info"><div class="trial-countdown-title">FREE TRIAL ACTIVE</div><div class="trial-countdown-timer" id="trial-timer" data-expires="{{ current_user.trial_expires_at }}">--:--:--</div></div><a href="{{ url_for('packages') }}" class="btn-primary btn-sm">Upgrade →</a></div>{% elif current_user.plan_id and has_access %}<div class="plan-status-card plan-active"><div class="plan-header"><span class="plan-name-badge active">✅ PLAN ACTIVE</span></div><h2 class="plan-title">{{ access_msg }}</h2><div class="plan-meta-row"><span>Projects: {{ servers|length }} / {% if current_user.project_limit == -1 %}∞{% else %}{{ current_user.project_limit }}{% endif %}</span></div><div class="plan-actions"><a href="{{ url_for('packages') }}" class="btn-secondary btn-sm">⬆️ Upgrade</a></div></div>{% elif not is_admin %}<div class="plan-status-card plan-none"><div class="plan-header"><span class="plan-name-badge none">⚠️ NO PLAN</span></div><h2 class="plan-title">Purchase a Plan</h2><p class="muted">To create projects, you need an active plan.</p><div class="plan-actions"><a href="{{ url_for('packages') }}" class="btn-primary">🚀 View Plans →</a></div></div>{% endif %}{% if announcements %}<div class="ann-stack">{% for a in announcements %}<div class="ann-card ann-{{ a.type }} {% if a.pinned %}ann-pinned{% endif %}"><div class="ann-head"><div class="ann-badges">{% if a.pinned %}<span class="badge badge-warn">📌 PINNED</span>{% endif %}<strong>{{ a.title }}</strong></div><span class="ann-date">{{ a.created_at|format_date }}</span></div><p class="ann-body">{{ a.content }}</p></div>{% endfor %}</div>{% endif %}<div class="section-head-row"><div><h2 class="section-title" style="margin:0;">My Projects ({{ servers|length }})</h2><p class="section-desc">{{ limit_msg }}</p></div>{% if can_create %}<a href="{{ url_for('create_server') }}" class="btn-primary">+ Create Project</a>{% else %}<a href="{{ url_for('packages') }}" class="btn-primary">⬆️ Upgrade to Create</a>{% endif %}</div>{% if servers %}<div class="grid grid-2">{% for s in servers %}<div class="server-card server-{{ s.status }}"><div class="server-top"><div class="server-id"><div class="server-icon">🐍</div><div><h3>{{ s.name }}</h3><span class="server-py">{{ s.runtime }}</span></div></div>{% if s.status == 'running' %}<span class="status status-running"><span class="dot"></span> Running</span>{% elif s.status == 'expired' %}<span class="status status-expired"><span class="dot"></span> Expired</span>{% else %}<span class="status status-stopped"><span class="dot"></span> Stopped</span>{% endif %}</div><div class="server-info"><div><span>Entry:</span><b>{{ s.entry_file or 'Not set' }}</b></div><div><span>Created:</span><span>{{ s.created_at|format_date }}</span></div><div><span>Expires:</span><b>{{ s.expires_at|format_date }}</b></div></div><a href="{{ url_for('server_manage', server_id=s.id) }}" class="btn-primary btn-block">⚙️ Manage Server</a></div>{% endfor %}</div>{% else %}<div class="empty-card"><div style="font-size:3rem;">🚀</div><h3>No Projects Yet</h3><p>Create your first project.</p><a href="{{ url_for('create_server') }}" class="btn-primary">+ Create Project</a></div>{% endif %}</div>{% endblock %}"""
 
-PACKAGES_HTML = """{% extends "base" %}{% block title %}Packages{% endblock %}{% block content %}<div class="wrap"><div class="section-head"><h1 class="section-title">Choose Your Plan</h1><p class="section-desc">Simple pricing. No hidden fees.</p></div><div class="grid grid-3">{% for pkg in packages %}{% if pkg.is_trial and trial_enabled %}<div class="pkg-card pkg-trial"><div class="pkg-ribbon pkg-ribbon-trial">🎁 FREE TRIAL</div><h3>{{ pkg.name }}</h3><div class="pkg-price-block"><span class="pkg-price" style="color:#10B981;">₹0</span><span class="pkg-period">/ {{ pkg.trial_hours }} hours</span></div><ul class="pkg-list">{% for f in pkg.features.split(',') %}<li>{{ f.strip() }}</li>{% endfor %}</ul>{% if user.trial_used %}<button class="btn-secondary btn-block" disabled>Trial Already Used</button>{% else %}<a href="{{ url_for('signup') }}" class="btn-success btn-block">Start Free Trial</a>{% endif %}</div>{% elif not pkg.is_trial %}<div class="pkg-card {% if pkg.is_popular %}pkg-featured{% endif %}">{% if pkg.is_popular %}<div class="pkg-ribbon">⭐ POPULAR</div>{% endif %}<h3>{{ pkg.name }}</h3><div class="pkg-price-block"><span class="pkg-price">₹{{ pkg.price }}</span><span class="pkg-period">/ {{ pkg.days }} days</span></div><ul class="pkg-list">{% for f in pkg.features.split(',') %}<li>{{ f.strip() }}</li>{% endfor %}</ul>{% if user.plan_id == pkg.id %}<button class="btn-secondary btn-block" disabled>✅ Current Plan</button>{% else %}<a href="{{ url_for('buy_redirect', pkg_id=pkg.id) }}" class="btn-primary btn-block">Buy Now → ₹{{ pkg.price }}</a>{% endif %}</div>{% endif %}{% endfor %}</div></div>{% endblock %}"""
+PACKAGES_HTML = """{% extends "base" %}{% block title %}Packages{% endblock %}{% block content %}<div class="wrap"><div class="section-head"><h1 class="section-title">Choose Your Plan</h1><p class="section-desc">Simple pricing. No hidden fees.</p></div><div class="grid grid-3">{% for pkg in packages %}{% if pkg.is_trial and trial_enabled and not is_admin %}<div class="pkg-card pkg-trial"><div class="pkg-ribbon pkg-ribbon-trial">🎁 FREE TRIAL</div><h3>{{ pkg.name }}</h3><div class="pkg-price-block"><span class="pkg-price" style="color:#10B981;">₹0</span><span class="pkg-period">/ {{ pkg.trial_hours }} hours</span></div><ul class="pkg-list">{% for f in pkg.features.split(',') %}<li>{{ f.strip() }}</li>{% endfor %}</ul>{% if user.trial_used %}<button class="btn-secondary btn-block" disabled>Trial Already Used</button>{% else %}<a href="{{ url_for('signup') }}" class="btn-success btn-block">Start Free Trial</a>{% endif %}</div>{% elif not pkg.is_trial %}<div class="pkg-card {% if pkg.is_popular %}pkg-featured{% endif %}">{% if pkg.is_popular %}<div class="pkg-ribbon">⭐ POPULAR</div>{% endif %}<h3>{{ pkg.name }}</h3><div class="pkg-price-block"><span class="pkg-price">₹{{ pkg.price }}</span><span class="pkg-period">/ {{ pkg.days }} days</span></div><ul class="pkg-list">{% for f in pkg.features.split(',') %}<li>{{ f.strip() }}</li>{% endfor %}</ul>{% if is_admin %}<button class="btn-secondary btn-block" disabled>👑 Owner Access</button>{% elif user.plan_id == pkg.id %}<button class="btn-secondary btn-block" disabled>✅ Current Plan</button>{% elif user.plan_id and user.plan_expires_at %}<a href="{{ url_for('buy_redirect', pkg_id=pkg.id) }}" class="btn-primary btn-block">⬆️ Upgrade → ₹{{ pkg.price }}</a>{% else %}<a href="{{ url_for('buy_redirect', pkg_id=pkg.id) }}" class="btn-primary btn-block">Buy Now → ₹{{ pkg.price }}</a>{% endif %}</div>{% endif %}{% endfor %}</div></div>{% endblock %}"""
 
 CHECKOUT_HTML = """{% extends "base" %}{% block title %}Checkout{% endblock %}{% block content %}<div class="wrap"><div class="checkout-card"><div class="checkout-header"><h2 class="checkout-plan-name">{{ pkg.name }}</h2><div class="checkout-amount">₹{{ pkg.price }}</div><p class="muted">{{ pkg.days }} days • {{ pkg.project_limit }} Projects</p></div><div class="checkout-details"><div class="checkout-detail-row"><span>Duration</span><b>{{ pkg.days }} days</b></div><div class="checkout-detail-row"><span>Projects</span><b>{{ pkg.project_limit }}</b></div><div class="checkout-detail-row"><span>Amount</span><b>₹{{ pkg.price }}</b></div></div><form method="POST" action="{{ url_for('checkout', pkg_id=pkg.id) }}"><button type="submit" class="btn-primary btn-block btn-lg">Proceed to Pay ₹{{ pkg.price }} →</button></form><div style="text-align:center;margin-top:16px;"><a href="{{ url_for('packages') }}" class="muted">← Back to Plans</a></div></div></div>{% endblock %}"""
 

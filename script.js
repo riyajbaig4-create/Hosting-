@@ -450,6 +450,10 @@ function quickCommand(cmd) {
   if (inp) { inp.value = cmd; inp.focus(); }
 }
 
+// Active terminal session store karo
+let activeTerminalSession = null;
+let terminalPollInterval = null;
+
 function sendTerminalCommand() {
   const input = document.getElementById('terminal-input');
   if (!input || !input.value.trim()) return;
@@ -464,21 +468,58 @@ function sendTerminalCommand() {
   const sid = term.dataset.serverId || term.getAttribute('data-server-id');
   if (!sid) return;
 
+  // ✅ Agar active session hai — matlab input bhej raha hai
+  const payload = activeTerminalSession 
+    ? { session_id: activeTerminalSession, input: cmd }
+    : { command: cmd };
+
   fetch('/api/servers/' + sid + '/terminal', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ command: cmd })
+    body: JSON.stringify(payload)
   })
     .then(r => r.json())
     .then(data => {
       if (data.success) {
+        // Output dikhao
         const lines = (data.output || '').split('\n');
-        lines.forEach(line => {
-          if (line.trim()) {
-            const cls = line.toLowerCase().includes('error') ? 'log-error' : 'log-success';
-            term.innerHTML += '<div class="log-line ' + cls + '">' + escapeHtml(line) + '</div>';
+        // Purani output clear karo agar session hai
+        if (activeTerminalSession) {
+          // Sirf naya output dikhao (last 50 lines)
+          const recent = lines.slice(-50);
+          term.innerHTML = '';
+          recent.forEach(line => {
+            if (line.trim()) {
+              const cls = line.toLowerCase().includes('error') ? 'log-error' : 'log-info';
+              term.innerHTML += '<div class="log-line ' + cls + '">' + escapeHtml(line) + '</div>';
+            }
+          });
+        } else {
+          lines.forEach(line => {
+            if (line.trim()) {
+              const cls = line.toLowerCase().includes('error') ? 'log-error' : 'log-success';
+              term.innerHTML += '<div class="log-line ' + cls + '">' + escapeHtml(line) + '</div>';
+            }
+          });
+        }
+        
+        // Session save karo
+        if (data.session_id) {
+          activeTerminalSession = data.session_id;
+        }
+        
+        // Agar running hai toh poll karo
+        if (data.running) {
+          term.innerHTML += '<div class="log-line log-warning">⏳ Command chal rahi hai (PID: ' + (data.pid || '?') + ')... Input de sakte ho.</div>';
+          startTerminalPoll(sid);
+        } else {
+          // Khatam — session clear
+          activeTerminalSession = null;
+          if (terminalPollInterval) {
+            clearInterval(terminalPollInterval);
+            terminalPollInterval = null;
           }
-        });
+        }
       } else {
         term.innerHTML += '<div class="log-line log-error">Error: ' + escapeHtml(data.message) + '</div>';
       }
@@ -487,6 +528,69 @@ function sendTerminalCommand() {
     .catch(() => {
       term.innerHTML += '<div class="log-line log-error">Network error</div>';
     });
+}
+
+function startTerminalPoll(serverId) {
+  if (terminalPollInterval) clearInterval(terminalPollInterval);
+  terminalPollInterval = setInterval(() => {
+    if (!activeTerminalSession) {
+      clearInterval(terminalPollInterval);
+      terminalPollInterval = null;
+      return;
+    }
+    const term = document.getElementById('terminal');
+    if (!term) return;
+    
+    fetch('/api/servers/' + serverId + '/terminal/poll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: activeTerminalSession })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.success) {
+          clearInterval(terminalPollInterval);
+          terminalPollInterval = null;
+          activeTerminalSession = null;
+          return;
+        }
+        // Output update karo
+        const lines = (data.output || '').split('\n');
+        const recent = lines.slice(-50);
+        term.innerHTML = '';
+        recent.forEach(line => {
+          if (line.trim()) {
+            const cls = line.toLowerCase().includes('error') ? 'log-error' : 'log-info';
+            term.innerHTML += '<div class="log-line ' + cls + '">' + escapeHtml(line) + '</div>';
+          }
+        });
+        term.scrollTop = term.scrollHeight;
+        
+        if (!data.running) {
+          term.innerHTML += '<div class="log-line log-success">✅ Command complete.</div>';
+          clearInterval(terminalPollInterval);
+          terminalPollInterval = null;
+          activeTerminalSession = null;
+        }
+      })
+      .catch(() => {});
+  }, 1500);
+}
+
+function closeTerminalSession(serverId) {
+  if (!activeTerminalSession) return;
+  fetch('/api/servers/' + serverId + '/terminal/close', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: activeTerminalSession })
+  }).then(() => {
+    activeTerminalSession = null;
+    if (terminalPollInterval) {
+      clearInterval(terminalPollInterval);
+      terminalPollInterval = null;
+    }
+    showToast('Terminal session closed.', 'success');
+  });
 }
 
 function clearTerminal() {
@@ -1145,6 +1249,8 @@ window.startLogStream = startLogStream;
 window.clearLogs = clearLogs;
 window.quickCommand = quickCommand;
 window.sendTerminalCommand = sendTerminalCommand;
+window.startTerminalPoll = startTerminalPoll;
+window.closeTerminalSession = closeTerminalSession;
 window.clearTerminal = clearTerminal;
 window.submitRenew = submitRenew;
 window.uploadFile = uploadFile;
