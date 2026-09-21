@@ -1,5 +1,6 @@
 /* ============================================================
-   HOSTX VIP — MAIN JAVASCRIPT
+   HOSTX VIP — MAIN JAVASCRIPT (UPDATED)
+   Terminal Interactive + Session Support
    ============================================================ */
 
 // ============================================================
@@ -371,7 +372,6 @@ function startLogStream(serverId, startTime) {
     fetch('/api/servers/' + serverId + '/logs')
       .then(r => r.json())
       .then(data => {
-        // Terminal update
         if (data.raw_logs) {
           const lines = data.raw_logs.split('\n');
           let html = '';
@@ -390,11 +390,9 @@ function startLogStream(serverId, startTime) {
           term.scrollTop = term.scrollHeight;
         }
 
-        // Status update
         updatePidBadge(data.pid);
         updateStatusBadge(data.status, data.pid);
 
-        // URL card — sirf running pe show, aur tab hi jab server_url ho
         if (urlCard && urlInput) {
           if (data.status === 'running' && data.server_url) {
             urlCard.style.display = 'block';
@@ -405,7 +403,6 @@ function startLogStream(serverId, startTime) {
           }
         }
 
-        // Uptime
         if (data.status === 'running' && data.start_time > 0) {
           const secs = Math.floor(Date.now() / 1000 - data.start_time);
           const h = Math.floor(secs / 3600);
@@ -443,16 +440,15 @@ function clearLogs(serverId) {
 }
 
 // ============================================================
-// 9. INTERACTIVE TERMINAL
+// 9. INTERACTIVE TERMINAL (UPDATED — Session Support)
 // ============================================================
+let activeTerminalSession = null;
+let terminalPollInterval = null;
+
 function quickCommand(cmd) {
   const inp = document.getElementById('terminal-input');
   if (inp) { inp.value = cmd; inp.focus(); }
 }
-
-// Active terminal session store karo
-let activeTerminalSession = null;
-let terminalPollInterval = null;
 
 function sendTerminalCommand() {
   const input = document.getElementById('terminal-input');
@@ -469,7 +465,7 @@ function sendTerminalCommand() {
   if (!sid) return;
 
   // ✅ Agar active session hai — matlab input bhej raha hai
-  const payload = activeTerminalSession 
+  const payload = activeTerminalSession
     ? { session_id: activeTerminalSession, input: cmd }
     : { command: cmd };
 
@@ -481,12 +477,10 @@ function sendTerminalCommand() {
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        // Output dikhao
-        const lines = (data.output || '').split('\n');
-        // Purani output clear karo agar session hai
         if (activeTerminalSession) {
-          // Sirf naya output dikhao (last 50 lines)
-          const recent = lines.slice(-50);
+          // Purani output replace karo — session mode
+          const lines = (data.output || '').split('\n');
+          const recent = lines.slice(-60);
           term.innerHTML = '';
           recent.forEach(line => {
             if (line.trim()) {
@@ -495,6 +489,8 @@ function sendTerminalCommand() {
             }
           });
         } else {
+          // Naya command — append karo
+          const lines = (data.output || '').split('\n');
           lines.forEach(line => {
             if (line.trim()) {
               const cls = line.toLowerCase().includes('error') ? 'log-error' : 'log-success';
@@ -502,18 +498,15 @@ function sendTerminalCommand() {
             }
           });
         }
-        
-        // Session save karo
+
         if (data.session_id) {
           activeTerminalSession = data.session_id;
         }
-        
-        // Agar running hai toh poll karo
+
         if (data.running) {
           term.innerHTML += '<div class="log-line log-warning">⏳ Command chal rahi hai (PID: ' + (data.pid || '?') + ')... Input de sakte ho.</div>';
           startTerminalPoll(sid);
         } else {
-          // Khatam — session clear
           activeTerminalSession = null;
           if (terminalPollInterval) {
             clearInterval(terminalPollInterval);
@@ -540,7 +533,7 @@ function startTerminalPoll(serverId) {
     }
     const term = document.getElementById('terminal');
     if (!term) return;
-    
+
     fetch('/api/servers/' + serverId + '/terminal/poll', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -554,9 +547,8 @@ function startTerminalPoll(serverId) {
           activeTerminalSession = null;
           return;
         }
-        // Output update karo
         const lines = (data.output || '').split('\n');
-        const recent = lines.slice(-50);
+        const recent = lines.slice(-60);
         term.innerHTML = '';
         recent.forEach(line => {
           if (line.trim()) {
@@ -565,7 +557,7 @@ function startTerminalPoll(serverId) {
           }
         });
         term.scrollTop = term.scrollHeight;
-        
+
         if (!data.running) {
           term.innerHTML += '<div class="log-line log-success">✅ Command complete.</div>';
           clearInterval(terminalPollInterval);
@@ -1196,19 +1188,16 @@ function startTrialCountdown(expiresAt) {
 // 18. INIT ON LOAD
 // ============================================================
 document.addEventListener('DOMContentLoaded', function() {
-  // Trial countdown
   const trialEl = document.getElementById('trial-timer');
   if (trialEl && trialEl.dataset.expires) {
     startTrialCountdown(trialEl.dataset.expires);
   }
 
-  // Payment poll
   const payPollEl = document.getElementById('payment-poll-order');
   if (payPollEl && payPollEl.dataset.orderId) {
     startPaymentPoll(payPollEl.dataset.orderId);
   }
 
-  // Bulk checkbox bar
   document.querySelectorAll('.fm-table-row .fm-checkbox').forEach(cb => {
     cb.addEventListener('change', function() {
       const row = this.closest('.fm-table-row');
@@ -1217,13 +1206,11 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  // Search input
   const searchInput = document.getElementById('fm-search-input');
   if (searchInput) {
     searchInput.addEventListener('input', filterFiles);
   }
 
-  // File manager search filter on page
   const fmSearch = document.querySelector('.fm-search input');
   if (fmSearch) {
     fmSearch.addEventListener('input', filterFiles);

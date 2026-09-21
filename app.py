@@ -412,6 +412,8 @@ def health():
 
 RUNNING_PROCESSES = {}
 SERVER_START_TIMES = {}
+TERMINAL_PROCS = {}       # server_id -> list of Popen (terminal background)
+TERMINAL_SESSIONS = {}    # session_id -> {'proc': Popen, 'buffer': str, 'cmd': str}
 
 def get_server_dir(user_id, server_id):
     path = os.path.join(SERVERS_DIR, str(user_id), str(server_id))
@@ -424,7 +426,6 @@ def is_safe_path(base, path):
     return base == target or target.startswith(base + os.sep)
 
 def write_server_log(server_id, level, message):
-    """Fix: only DB log — not to file"""
     try:
         db = get_db()
         db.execute("INSERT INTO server_logs (server_id, level, message) VALUES (?, ?, ?)", (server_id, level, message))
@@ -558,31 +559,37 @@ def stop_server_process(server_id):
             try: proc.kill()
             except Exception: pass
     
-    # ✅ Terminal processes bhi band karo
-    term_procs = TERMINAL_PROCS.pop(server_id, [])
-    for tp in term_procs:
-        try:
-            if hasattr(os, 'killpg'):
-                os.killpg(os.getpgid(tp.pid), signal.SIGTERM)
-            else:
-                tp.terminate()
-            tp.wait(timeout=2)
-        except Exception:
-            try: tp.kill()
-            except Exception: pass
-    
-    # ✅ Terminal sessions bhi clean karo
-    for sid in list(TERMINAL_SESSIONS.keys()):
-        try:
-            proc = TERMINAL_SESSIONS[sid]['proc']
-            if proc.poll() is None:
+    # ✅ Terminal background processes bhi band karo
+    try:
+        term_procs = TERMINAL_PROCS.pop(server_id, [])
+        for tp in term_procs:
+            try:
                 if hasattr(os, 'killpg'):
-                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                    os.killpg(os.getpgid(tp.pid), signal.SIGTERM)
                 else:
-                    proc.terminate()
-            del TERMINAL_SESSIONS[sid]
-        except Exception:
-            pass
+                    tp.terminate()
+                tp.wait(timeout=2)
+            except Exception:
+                try: tp.kill()
+                except Exception: pass
+    except Exception:
+        pass
+    
+    # ✅ Terminal sessions clean karo
+    try:
+        for sid in list(TERMINAL_SESSIONS.keys()):
+            try:
+                tproc = TERMINAL_SESSIONS[sid]['proc']
+                if tproc.poll() is None:
+                    if hasattr(os, 'killpg'):
+                        os.killpg(os.getpgid(tproc.pid), signal.SIGTERM)
+                    else:
+                        tproc.terminate()
+                del TERMINAL_SESSIONS[sid]
+            except Exception:
+                pass
+    except Exception:
+        pass
     
     SERVER_START_TIMES.pop(server_id, None)
     row = db.execute("SELECT pid FROM servers WHERE id=?", (server_id,)).fetchone()
@@ -642,8 +649,11 @@ def start_server_process(server_id):
             except Exception: pass
     stop_server_process(server_id)
     logp = os.path.join(sdir, 'server.log')
-    logf = open(logp, 'a', encoding='utf-8')
-    logf.write(f"\n--- Started {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} ---\n"); logf.flush()
+    logf = open(logp, 'a', encoding='utf-8', buffering=1)
+    logf.write(f"\n--- Started {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+    logf.flush()
+    try: os.fsync(logf.fileno())
+    except Exception: pass
     env = os.environ.copy()
     env['PYTHONUNBUFFERED'] = '1'
     env['PORT'] = str(user_port); env['HOSTX_PORT'] = str(user_port); env['HOSTX_SERVER_ID'] = str(server_id)
@@ -652,34 +662,41 @@ def start_server_process(server_id):
     kwargs = {}
     if hasattr(os, 'setsid'): kwargs['preexec_fn'] = os.setsid
     try:
-        proc = subprocess.Popen(cmd, cwd=sdir, stdout=logf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, **kwargs)
+        proc = subprocess.Popen(cmd, cwd=sdir, stdout=logf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, bufsize=0, **kwargs)
         RUNNING_PROCESSES[server_id] = proc
         SERVER_START_TIMES[server_id] = time.time()
         db.execute("UPDATE servers SET status='running', pid=?, runtime=? WHERE id=?", (proc.pid, runtime, server_id))
         db.commit()
         write_server_log(server_id, 'INFO', f"Started (PID {proc.pid}) — {runtime}")
+        
         # Sirf web projects ke liye URL dikhao
-is_web = runtime in ('flask', 'fastapi', 'django', 'static', 'nodejs', 'php')
-if is_web:
-    base_url = request.url_root.rstrip('/') if request else 'http://localhost:3000'
-    srv_row = db.execute("SELECT slug FROM servers WHERE id=?", (server_id,)).fetchone()
-    if srv_row and srv_row['slug']:
-        srv_url = f"{base_url}/{srv_row['slug']}/"
-        write_server_log(server_id, 'SUCCESS', '━' * 40)
-        write_server_log(server_id, 'SUCCESS', '🎉 SERVER IS RUNNING')
-        write_server_log(server_id, 'SUCCESS', f'🌐 URL: {srv_url}')
-        write_server_log(server_id, 'SUCCESS', '━' * 40)
-else:
-    write_server_log(server_id, 'SUCCESS', '━' * 40)
-    write_server_log(server_id, 'SUCCESS', '✅ RUNNING')
-    write_server_log(server_id, 'SUCCESS', f'📋 PID: {proc.pid}')
-    write_server_log(server_id, 'SUCCESS', '━' * 40)
-return True, f"Running (PID {proc.pid})", [], False
+        is_web = runtime in ('flask','fastapi','django','static','nodejs','php')
+        if is_web:
+            base_url = request.url_root.rstrip('/') if request else 'http://localhost:3000'
+            srv_row = db.execute("SELECT slug FROM servers WHERE id=?", (server_id,)).fetchone()
+            if srv_row and srv_row['slug']:
+                srv_url = f"{base_url}/{srv_row['slug']}/"
+                write_server_log(server_id, 'SUCCESS', '━' * 40)
+                write_server_log(server_id, 'SUCCESS', '🎉 SERVER IS RUNNING')
+                write_server_log(server_id, 'SUCCESS', f'🌐 URL: {srv_url}')
+                write_server_log(server_id, 'SUCCESS', '━' * 40)
+        else:
+            write_server_log(server_id, 'SUCCESS', '━' * 40)
+            write_server_log(server_id, 'SUCCESS', '✅ RUNNING')
+            write_server_log(server_id, 'SUCCESS', f'📋 PID: {proc.pid}')
+            write_server_log(server_id, 'SUCCESS', '━' * 40)
+        return True, f"Running (PID {proc.pid})", [], False
     except Exception as e:
         write_server_log(server_id, 'ERROR', f"Launch failed: {e}")
         db.execute("UPDATE servers SET status='error', pid=0 WHERE id=?", (server_id,)); db.commit()
         return False, str(e), [], False
+        
+        
+        
 
+# ============================================================
+# ROUTES — AUTH
+# ============================================================
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if 'user_id' in session and get_current_user(): return redirect(url_for('dashboard'))
@@ -739,6 +756,7 @@ def signup():
         return redirect(url_for('dashboard'))
     return render_template_string(SIGNUP_HTML)
 
+
 @app.route('/signin', methods=['GET', 'POST'])
 def signin():
     if 'user_id' in session and get_current_user(): return redirect(url_for('dashboard'))
@@ -770,12 +788,17 @@ def signin():
         return redirect(url_for('dashboard'))
     return render_template_string(SIGNIN_HTML)
 
+
 @app.route('/signout')
 def signout():
     session.clear()
     flash('Signed out safely.', 'info')
     return redirect(url_for('home'))
 
+
+# ============================================================
+# FORGOT PASSWORD APIs
+# ============================================================
 @app.route('/api/forgot-password/captcha')
 def fp_captcha():
     n1 = random.randint(1,10); n2 = random.randint(1,10)
@@ -783,6 +806,7 @@ def fp_captcha():
     ans = n1+n2 if op=='+' else (n1-n2 if op=='-' else n1*n2)
     session['fp_ans'] = ans; session['fp_verified'] = False; session['fp_email'] = None
     return jsonify({'question': f"{n1} {op} {n2} = ?"})
+
 
 @app.route('/api/forgot-password/verify-captcha', methods=['POST'])
 def fp_vc():
@@ -792,6 +816,7 @@ def fp_vc():
         session['fp_verified'] = True
         return jsonify({'success': True})
     return jsonify({'success': False, 'message': 'Incorrect.'})
+
 
 @app.route('/api/forgot-password/verify-email', methods=['POST'])
 def fp_ve():
@@ -804,6 +829,7 @@ def fp_ve():
         session['fp_email'] = em
         return jsonify({'success': True})
     return jsonify({'success': False, 'message': 'Email not registered.'})
+
 
 @app.route('/api/forgot-password/reset', methods=['POST'])
 def fp_reset():
@@ -822,6 +848,10 @@ def fp_reset():
         return jsonify({'success': True})
     except Exception as e: return jsonify({'success': False, 'message': str(e)})
 
+
+# ============================================================
+# ROUTES — MAIN
+# ============================================================
 @app.route('/')
 def home():
     db = get_db()
@@ -838,6 +868,7 @@ def home():
     trial_enabled = get_setting('trial_enabled', '1') == '1'
     trial_hours = int(get_setting('trial_hours', '6'))
     return render_template_string(HOME_HTML, packages=pkgs, total_servers=ts, total_users=tu, trial_enabled=trial_enabled, trial_hours=trial_hours)
+
 
 @app.route('/dashboard')
 @login_required
@@ -857,6 +888,7 @@ def dashboard():
     can_create, limit_msg = check_project_limit(user)
     return render_template_string(DASHBOARD_HTML, servers=servers, total_files=tf, storage_formatted=storage, announcements=anns, can_create=can_create, limit_msg=limit_msg)
 
+
 @app.route('/packages')
 @login_required
 def packages():
@@ -868,11 +900,13 @@ def packages():
     trial_enabled = get_setting('trial_enabled', '1') == '1'
     return render_template_string(PACKAGES_HTML, packages=pkgs, user=user, trial_enabled=trial_enabled)
 
+
 @app.route('/packages/<int:pkg_id>/buy')
 def buy_redirect(pkg_id):
     if 'user_id' not in session or not get_current_user():
         return redirect(url_for('signin', next=url_for('checkout', pkg_id=pkg_id)))
     return redirect(url_for('checkout', pkg_id=pkg_id))
+
 
 @app.route('/checkout/<int:pkg_id>', methods=['GET', 'POST'])
 @login_required
@@ -898,6 +932,7 @@ def checkout(pkg_id):
         return redirect(url_for('payment_page', order_id=order_id))
     return render_template_string(CHECKOUT_HTML, pkg=pkg, user=user)
 
+
 def detect_upi_app(upi_id):
     if not upi_id or '@' not in upi_id: return 'unknown', None
     suffix = upi_id.split('@')[1].lower()
@@ -909,8 +944,8 @@ def detect_upi_app(upi_id):
     if suffix in ('upi','bhim'): return 'bhim', 'razorpay'
     return 'unknown', None
 
+
 def get_available_upis():
-    """Return list of (app_key, upi_id, display_name) for enabled apps"""
     keys = {
         'phonepe': ('📱 PhonePe', 'upi_phonepe'),
         'gpay': ('🅶 Google Pay', 'upi_gpay'),
@@ -926,6 +961,7 @@ def get_available_upis():
             available[k] = {'upi': upi, 'name': name}
     return available
 
+
 @app.route('/payment/<int:order_id>')
 @login_required
 def payment_page(order_id):
@@ -937,31 +973,28 @@ def payment_page(order_id):
     all_upis = get_available_upis()
     primary_upi = (get_setting('upi_primary', '') or '').strip()
     if not primary_upi or primary_upi not in [v['upi'] for v in all_upis.values()]:
-        # Fallback: first available
         if all_upis:
             primary_key = list(all_upis.keys())[0]
             primary_upi = all_upis[primary_key]['upi']
         else:
             primary_upi = ''
-    # Detect
     primary_app, verify_type = detect_upi_app(primary_upi)
     auto_verify = False
     if verify_type == 'fampay' and (get_setting('fampay_api_key', '') or '').strip():
         auto_verify = True
     elif verify_type == 'razorpay' and (get_setting('razorpay_key', '') or '').strip():
         auto_verify = True
-    # App list — hide primary
     apps_list = []
     logo_map = {'phonepe':'PhonePe','gpay':'GooglePay','paytm':'Paytm','fampay':'FamPay','bhim':'BHIM','amazonpay':'AmazonPay'}
     for k, v in all_upis.items():
         if v['upi'] == primary_upi: continue
         apps_list.append({'key': k, 'upi': v['upi'], 'name': v['name'], 'logo': logo_map.get(k, k)})
-    # QR
     qr_data = f"upi://pay?pa={primary_upi}&pn=HostX&am={order['amount']}&cu=INR&tn=Order{order_id}"
     qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={quote(qr_data)}" if primary_upi else ''
     return render_template_string(PAYMENT_HTML, order=order, pkg=pkg, qr_url=qr_url,
         selected_upi=primary_upi, primary_app=primary_app, auto_verify=auto_verify,
         apps_list=apps_list, has_upi=bool(primary_upi))
+
 
 @app.route('/api/payment/check/<int:order_id>')
 @login_required
@@ -970,6 +1003,7 @@ def payment_check(order_id):
     order = db.execute("SELECT * FROM orders WHERE id=? AND user_id=?", (order_id, user['id'])).fetchone()
     if not order: return jsonify({'success': False})
     return jsonify({'success': True, 'status': order['status'], 'redirect': url_for('dashboard')})
+
 
 @app.route('/api/payment/manual/<int:order_id>/submit', methods=['POST'])
 @login_required
@@ -984,6 +1018,7 @@ def payment_manual_submit(order_id):
     db.commit()
     notify_admin('payment', '💰 Payment Submitted', f'@{user["username"]} submitted TXN ID: {txn} for order #{order_id} (₹{order["amount"]})', user['id'], order_id)
     return jsonify({'success': True})
+
 
 def activate_plan(user_id, pkg_id, amount=0, method='manual', notes=''):
     db = get_db()
@@ -1008,6 +1043,10 @@ def activate_plan(user_id, pkg_id, amount=0, method='manual', notes=''):
     create_user_notification(user_id, '🎉 Plan Activated', f'Your {pkg["name"]} plan is active until {new_exp.strftime("%d %b %Y")}.')
     return True
 
+
+# ============================================================
+# ROUTES — SERVER
+# ============================================================
 @app.route('/servers/create', methods=['GET', 'POST'])
 @login_required
 def create_server():
@@ -1051,6 +1090,7 @@ def create_server():
         return redirect(url_for('file_manager', server_id=sid))
     return render_template_string(CREATE_SERVER_HTML, user=user, limit_msg=msg)
 
+
 def check_ownership(server_id, user_id=None):
     if user_id is None: user_id = session.get('user_id')
     db = get_db()
@@ -1060,6 +1100,7 @@ def check_ownership(server_id, user_id=None):
     if u and is_user_admin(u): return s
     if s['user_id'] != user_id: return None
     return s
+
 
 @app.route('/servers/<int:server_id>')
 @login_required
@@ -1074,12 +1115,13 @@ def server_manage(server_id):
     sdir = get_server_dir(server['user_id'], server_id)
     scan = scan_project(sdir)
     base_url = request.url_root.rstrip('/')
-is_web = server['runtime'] in ('flask', 'fastapi', 'django', 'static', 'nodejs', 'php')
-server_url = ''
-if is_web and server['slug'] and server['status'] == 'running':
-    server_url = f"{base_url}/{server['slug']}/"
-return render_template_string(SERVER_MANAGE_HTML, server=server, scan=scan,
-    remaining_days=rd, remaining_hours=rh, start_time=st, server_url=server_url)
+    is_web = server['runtime'] in ('flask', 'fastapi', 'django', 'static', 'nodejs', 'php')
+    server_url = ''
+    if is_web and server['slug'] and server['status'] == 'running':
+        server_url = f"{base_url}/{server['slug']}/"
+    return render_template_string(SERVER_MANAGE_HTML, server=server, scan=scan,
+        remaining_days=rd, remaining_hours=rh, start_time=st, server_url=server_url)
+
 
 @app.route('/api/servers/<int:server_id>/action', methods=['POST'])
 @login_required
@@ -1115,6 +1157,7 @@ def server_action(server_id):
         return jsonify({'success': True, 'message': 'Restarted.', 'status': 'running', 'pid': s['pid'] if s else 0})
     return jsonify({'success': False, 'message': 'Invalid'}), 400
 
+
 @app.route('/api/servers/<int:server_id>/delete', methods=['POST'])
 @login_required
 def server_delete(server_id):
@@ -1133,6 +1176,7 @@ def server_delete(server_id):
     log_admin_action('Deleted Server', f"Server #{server_id} ({server['name']})", f"Owner: {server['user_id']}")
     return jsonify({'success': True, 'message': 'Server deleted.'})
 
+
 @app.route('/api/servers/<int:server_id>/logs')
 @login_required
 def get_logs(server_id):
@@ -1143,22 +1187,22 @@ def get_logs(server_id):
     raw = ""
     if os.path.exists(logp):
         try:
-            with open(logp, 'r', encoding='utf-8', errors='ignore') as f:
-                raw = ''.join(f.readlines()[-300:])
-        except Exception as e: raw = f"[ERROR] {e}"
-    db = get_db()
-    dbl = db.execute("SELECT level, message, created_at FROM server_logs WHERE server_id=? ORDER BY id DESC LIMIT 100", (server_id,)).fetchall()
-    db_list = [{'level': r['level'], 'message': r['message'], 'time': str(r['created_at'])} for r in reversed(dbl)]
+            with open(logp, 'rb') as f:
+                f.seek(0, 2)
+                size = f.tell()
+                read_size = min(size, 50 * 1024)
+                f.seek(size - read_size)
+                raw = f.read().decode('utf-8', errors='ignore')
+        except Exception as e:
+            raw = f"[ERROR] {e}"
     st = SERVER_START_TIMES.get(server_id, 0) if server['status'] == 'running' else 0
     server_url = ''
     if server['status'] == 'running' and server['slug']:
         server_url = f"{request.url_root.rstrip('/')}/{server['slug']}/"
-    # Merge DB logs + file logs
-    full_logs = raw
-    for d in db_list:
-        full_logs += f"[{d['time']}] [{d['level']}] {d['message']}\n"
-    return jsonify({'raw_logs': full_logs, 'db_logs': db_list, 'status': server['status'],
-        'pid': server['pid'] if server['status'] == 'running' else 0, 'start_time': st, 'server_url': server_url})
+    return jsonify({'raw_logs': raw, 'status': server['status'],
+        'pid': server['pid'] if server['status'] == 'running' else 0,
+        'start_time': st, 'server_url': server_url})
+
 
 @app.route('/api/servers/<int:server_id>/logs/clear', methods=['POST'])
 @login_required
@@ -1175,10 +1219,10 @@ def clear_logs(server_id):
         return jsonify({'success': True, 'message': 'Logs cleared.'})
     except Exception as e: return jsonify({'success': False, 'message': str(e)}), 500
 
-# Terminal background processes + interactive sessions store karne ke liye
-TERMINAL_PROCS = {}       # server_id -> list of Popen
-TERMINAL_SESSIONS = {}    # session_id -> {'proc': Popen, 'buffer': str, 'cmd': str}
 
+# ============================================================
+# TERMINAL — INTERACTIVE with sessions
+# ============================================================
 @app.route('/api/servers/<int:server_id>/terminal', methods=['POST'])
 @login_required
 def server_terminal(server_id):
@@ -1187,21 +1231,18 @@ def server_terminal(server_id):
     data = request.get_json() or {}
     cmd = (data.get('command') or '').strip()
     session_id = (data.get('session_id') or '').strip()
-    input_data = data.get('input')  # Interactive input ke liye
+    input_data = data.get('input')
     
-    # ✅ Agar session_id hai — matlab input bhej raha hai existing session ko
+    # Existing session ko input bhejo
     if session_id and session_id in TERMINAL_SESSIONS:
         sess = TERMINAL_SESSIONS[session_id]
         proc = sess['proc']
         if proc.poll() is not None:
-            # Process khatam ho chuka
             output = sess['buffer']
             del TERMINAL_SESSIONS[session_id]
             return jsonify({
-                'success': True,
-                'output': output,
-                'running': False,
-                'code': proc.returncode,
+                'success': True, 'output': output,
+                'running': False, 'code': proc.returncode,
                 'session_id': session_id
             })
         if input_data is not None:
@@ -1209,17 +1250,16 @@ def server_terminal(server_id):
                 proc.stdin.write(input_data + '\n')
                 proc.stdin.flush()
             except Exception as e:
-                return jsonify({'success': False, 'message': f'Input write failed: {e}'})
+                return jsonify({'success': False, 'message': f'Input failed: {e}'})
         time.sleep(0.5)
         return jsonify({
-            'success': True,
-            'output': sess['buffer'],
+            'success': True, 'output': sess['buffer'],
             'running': proc.poll() is None,
             'code': proc.poll() if proc.poll() is not None else -1,
             'session_id': session_id
         })
     
-    # Naya command — session_id nahi hai
+    # Naya command
     if not cmd: return jsonify({'success': False, 'message': 'Command required'})
     blocked = ['rm -rf /', 'shutdown', 'reboot', 'mkfs', 'dd if=', ':(){:|:&};:']
     for b in blocked:
@@ -1231,10 +1271,9 @@ def server_terminal(server_id):
     env['PYTHONPATH'] = f"{sdir}:{pdir}:" + env.get('PYTHONPATH','')
     env['PORT'] = str(server['port'] or 5001)
     env['PYTHONUNBUFFERED'] = '1'
-    env['TERM'] = 'dumb'  # ✅ ANSI colors minimal
+    env['TERM'] = 'dumb'
     
     try:
-        # ✅ Background process — stdin PIPE (interactive support)
         kwargs = {}
         if hasattr(os, 'setsid'):
             kwargs['preexec_fn'] = os.setsid
@@ -1248,12 +1287,10 @@ def server_terminal(server_id):
             **kwargs
         )
         
-        # Store in TERMINAL_PROCS (for STOP button)
         if server_id not in TERMINAL_PROCS:
             TERMINAL_PROCS[server_id] = []
         TERMINAL_PROCS[server_id].append(proc)
         
-        # New session banao
         new_sid = secrets.token_hex(8)
         TERMINAL_SESSIONS[new_sid] = {
             'proc': proc,
@@ -1261,25 +1298,23 @@ def server_terminal(server_id):
             'cmd': cmd
         }
         
-        # Background mein output read karo
         def _reader(sid, p):
             try:
                 while True:
                     line = p.stdout.readline()
                     if not line:
                         break
-                    TERMINAL_SESSIONS[sid]['buffer'] += line
-                    if len(TERMINAL_SESSIONS[sid]['buffer']) > 50000:
-                        TERMINAL_SESSIONS[sid]['buffer'] = TERMINAL_SESSIONS[sid]['buffer'][-30000:]
+                    if sid in TERMINAL_SESSIONS:
+                        TERMINAL_SESSIONS[sid]['buffer'] += line
+                        if len(TERMINAL_SESSIONS[sid]['buffer']) > 50000:
+                            TERMINAL_SESSIONS[sid]['buffer'] = TERMINAL_SESSIONS[sid]['buffer'][-30000:]
             except Exception:
                 pass
         
         threading.Thread(target=_reader, args=(new_sid, proc), daemon=True).start()
-        
-        # Thoda wait karo output ke liye
         time.sleep(1.2)
         
-        sess = TERMINAL_SESSIONS.get(new_sid, {'buffer': '(no output)', 'proc': proc})
+        sess = TERMINAL_SESSIONS.get(new_sid, {'buffer': '(no output)'})
         return jsonify({
             'success': True,
             'output': sess['buffer'],
@@ -1295,7 +1330,6 @@ def server_terminal(server_id):
 @app.route('/api/servers/<int:server_id>/terminal/poll', methods=['POST'])
 @login_required
 def server_terminal_poll(server_id):
-    """Session ka latest output poll karo"""
     data = request.get_json() or {}
     sid = data.get('session_id', '')
     if sid not in TERMINAL_SESSIONS:
@@ -1313,7 +1347,6 @@ def server_terminal_poll(server_id):
 @app.route('/api/servers/<int:server_id>/terminal/close', methods=['POST'])
 @login_required
 def server_terminal_close(server_id):
-    """Session band karo"""
     data = request.get_json() or {}
     sid = data.get('session_id', '')
     if sid in TERMINAL_SESSIONS:
@@ -1330,6 +1363,10 @@ def server_terminal_close(server_id):
         del TERMINAL_SESSIONS[sid]
     return jsonify({'success': True})
 
+
+# ============================================================
+# ACCOUNT
+# ============================================================
 @app.route('/account', methods=['GET', 'POST'])
 @login_required
 def account():
@@ -1379,6 +1416,10 @@ def account():
             flash('Password changed!', 'success'); return redirect(url_for('account'))
     return render_template_string(ACCOUNT_HTML, user=user)
 
+
+# ============================================================
+# NOTIFICATIONS
+# ============================================================
 @app.route('/api/notifications')
 @login_required
 def get_notifs():
@@ -1392,6 +1433,7 @@ def get_notifs():
     un = db.execute("SELECT COUNT(*) FROM notifications WHERE user_id=? AND is_read=0", (user['id'],)).fetchone()[0]
     return jsonify({'success': True, 'notifications': [{'id': r['id'], 'title': r['title'], 'message': r['message'], 'is_read': r['is_read'], 'created_at': str(r['created_at'])} for r in rows], 'unread_count': un})
 
+
 @app.route('/api/notifications/mark-read', methods=['POST'])
 @login_required
 def mark_read():
@@ -1399,12 +1441,14 @@ def mark_read():
     db.execute("UPDATE notifications SET is_read=1 WHERE user_id=?", (user['id'],)); db.commit()
     return jsonify({'success': True})
 
+
 @app.route('/api/notifications/clear-all', methods=['POST'])
 @login_required
 def clear_notifs():
     user = get_current_user(); db = get_db()
     db.execute("DELETE FROM notifications WHERE user_id=?", (user['id'],)); db.commit()
     return jsonify({'success': True, 'unread_count': 0})
+
 
 @app.route('/api/notifications/<int:nid>/delete', methods=['POST'])
 @login_required
@@ -1414,6 +1458,10 @@ def del_notif(nid):
     un = db.execute("SELECT COUNT(*) FROM notifications WHERE user_id=? AND is_read=0", (user['id'],)).fetchone()[0]
     return jsonify({'success': True, 'unread_count': un})
 
+
+# ============================================================
+# BACKGROUND THREADS
+# ============================================================
 def _self_ping():
     if requests is None: return
     time.sleep(15)
@@ -1438,6 +1486,7 @@ def _self_ping():
         time.sleep(iv * 60)
 threading.Thread(target=_self_ping, daemon=True).start()
 
+
 def _monitor():
     while True:
         try:
@@ -1461,8 +1510,18 @@ def _monitor():
                         conn = sqlite3.connect(DB_PATH); conn.row_factory = sqlite3.Row
                         srv = conn.execute("SELECT * FROM servers WHERE id=?", (sid,)).fetchone()
                         if srv:
-                            conn.execute("UPDATE servers SET status=?, pid=0 WHERE id=?",
-                                ('error' if code != 0 else 'stopped', sid))
+                            new_status = 'error' if code != 0 else 'stopped'
+                            conn.execute("UPDATE servers SET status=?, pid=0 WHERE id=?", (new_status, sid))
+                            if code != 0:
+                                conn.execute(
+                                    "INSERT INTO server_logs (server_id, level, message) VALUES (?, 'ERROR', ?)",
+                                    (sid, f'❌ Process crashed with exit code {code}. Check logs above.')
+                                )
+                            else:
+                                conn.execute(
+                                    "INSERT INTO server_logs (server_id, level, message) VALUES (?, 'INFO', ?)",
+                                    (sid, 'Process exited normally.')
+                                )
                             conn.commit()
                         conn.close()
                     except Exception: pass
@@ -1472,11 +1531,8 @@ def _monitor():
 threading.Thread(target=_monitor, daemon=True).start()
 
 
-
-
-
 # ============================================================
-# FILE MANAGER ROUTES
+# FILE MANAGER
 # ============================================================
 @app.route('/servers/<int:server_id>/files')
 @login_required
@@ -1532,6 +1588,7 @@ def file_manager(server_id):
         current_path=rp, breadcrumbs=crumbs, total_items=total, current_page=page,
         total_pages=total_pages, sort_field=sort_field, sort_order=sort_order)
 
+
 @app.route('/api/servers/<int:server_id>/files/upload', methods=['POST'])
 @login_required
 def upload_file(server_id):
@@ -1566,6 +1623,7 @@ def upload_file(server_id):
         db.execute("UPDATE servers SET entry_file=? WHERE id=?", (scan['entry_file'], server_id)); db.commit()
     return jsonify({'success': True, 'message': f'Uploaded {cnt} file(s), extracted {zips} zip(s).', 'scan': scan})
 
+
 @app.route('/api/servers/<int:server_id>/files/create-folder', methods=['POST'])
 @login_required
 def create_folder(server_id):
@@ -1582,6 +1640,7 @@ def create_folder(server_id):
         return jsonify({'success': True, 'message': f'Folder "{name}" created.'})
     except FileExistsError: return jsonify({'success': False, 'message': 'Exists'}), 400
     except Exception as e: return jsonify({'success': False, 'message': str(e)}), 500
+
 
 @app.route('/api/servers/<int:server_id>/files/create-file', methods=['POST'])
 @login_required
@@ -1600,6 +1659,7 @@ def create_file(server_id):
         return jsonify({'success': True, 'message': f'"{name}" created.'})
     except Exception as e: return jsonify({'success': False, 'message': str(e)}), 500
 
+
 @app.route('/api/servers/<int:server_id>/files/read')
 @login_required
 def read_file(server_id):
@@ -1614,6 +1674,7 @@ def read_file(server_id):
         with open(t, 'r', encoding='utf-8', errors='ignore') as f:
             return jsonify({'success': True, 'content': f.read(), 'filename': os.path.basename(t)})
     except Exception as e: return jsonify({'success': False, 'message': str(e)}), 500
+
 
 @app.route('/api/servers/<int:server_id>/files/save', methods=['POST'])
 @login_required
@@ -1631,6 +1692,7 @@ def save_file(server_id):
         return jsonify({'success': True, 'message': 'Saved.'})
     except Exception as e: return jsonify({'success': False, 'message': str(e)}), 500
 
+
 @app.route('/api/servers/<int:server_id>/files/delete', methods=['POST'])
 @login_required
 def delete_file(server_id):
@@ -1647,6 +1709,7 @@ def delete_file(server_id):
         elif os.path.isfile(t): os.remove(t)
         return jsonify({'success': True, 'message': 'Deleted.'})
     except Exception as e: return jsonify({'success': False, 'message': str(e)}), 500
+
 
 @app.route('/api/servers/<int:server_id>/files/rename', methods=['POST'])
 @login_required
@@ -1666,6 +1729,7 @@ def rename_file(server_id):
         os.rename(src, dst)
         return jsonify({'success': True, 'message': f'Renamed to {new}'})
     except Exception as e: return jsonify({'success': False, 'message': str(e)}), 500
+
 
 @app.route('/api/servers/<int:server_id>/files/unzip', methods=['POST'])
 @login_required
@@ -1690,6 +1754,7 @@ def unzip_file(server_id):
         return jsonify({'success': True, 'message': 'Extracted!', 'scan': scan})
     except Exception as e: return jsonify({'success': False, 'message': str(e)}), 500
 
+
 @app.route('/servers/<int:server_id>/files/download')
 @login_required
 def download_file(server_id):
@@ -1700,6 +1765,7 @@ def download_file(server_id):
     t = os.path.join(sdir, path)
     if not is_safe_path(sdir, t) or not os.path.isfile(t): abort(404)
     return send_file(t, as_attachment=True)
+
 
 # ============================================================
 # ADMIN ROUTES
@@ -1737,6 +1803,7 @@ def admin_dashboard():
         total_files=tf, total_storage_formatted=st, recent_users=ru,
         recent_logs=rl, recent_notifications=rn)
 
+
 @app.route('/admin/orders')
 @admin_permission_required('manage_orders')
 def admin_orders():
@@ -1747,6 +1814,7 @@ def admin_orders():
     else:
         orders = db.execute("SELECT o.*, u.username, u.email, u.full_name, p.name as pkg_name FROM orders o JOIN users u ON o.user_id=u.id JOIN packages p ON o.package_id=p.id WHERE o.status=? ORDER BY o.id DESC LIMIT 200", (status,)).fetchall()
     return render_template_string(ADMIN_ORDERS_HTML, orders=orders, current_status=status)
+
 
 @app.route('/admin/orders/<int:order_id>/approve', methods=['POST'])
 @admin_permission_required('manage_orders')
@@ -1766,6 +1834,7 @@ def admin_approve_order(order_id):
     flash(f'Order #{order_id} approved!', 'success')
     return redirect(url_for('admin_orders'))
 
+
 @app.route('/admin/orders/<int:order_id>/reject', methods=['POST'])
 @admin_permission_required('manage_orders')
 def admin_reject_order(order_id):
@@ -1779,12 +1848,14 @@ def admin_reject_order(order_id):
     flash(f'Order #{order_id} rejected.', 'info')
     return redirect(url_for('admin_orders'))
 
+
 @app.route('/admin/plans')
 @admin_permission_required('manage_orders')
 def admin_plans():
     db = get_db()
     history = db.execute("SELECT ph.*, u.username, u.email, u.full_name, p.name as pkg_name FROM plan_history ph JOIN users u ON ph.user_id=u.id JOIN packages p ON ph.package_id=p.id ORDER BY ph.id DESC LIMIT 200").fetchall()
     return render_template_string(ADMIN_PLANS_HTML, history=history)
+
 
 @app.route('/admin/trials')
 @admin_permission_required('manage_orders')
@@ -1795,6 +1866,7 @@ def admin_trials():
     converted = db.execute("SELECT COUNT(*) FROM trial_history WHERE converted_to_plan=1").fetchone()[0]
     return render_template_string(ADMIN_TRIALS_HTML, trials=trials, total=total, converted=converted)
 
+
 @app.route('/admin/notifications')
 @admin_permission_required('manage_orders')
 def admin_notifications_page():
@@ -1802,6 +1874,7 @@ def admin_notifications_page():
     notifs = db.execute("SELECT an.*, u.username, u.email, u.full_name FROM admin_notifications an LEFT JOIN users u ON an.user_id=u.id ORDER BY an.id DESC LIMIT 100").fetchall()
     db.execute("UPDATE admin_notifications SET is_read=1"); db.commit()
     return render_template_string(ADMIN_NOTIFICATIONS_HTML, notifications=notifs)
+
 
 @app.route('/admin/users')
 @admin_permission_required('manage_users')
@@ -1813,6 +1886,7 @@ def admin_users():
     else:
         users = db.execute("SELECT u.*, (SELECT COUNT(*) FROM servers WHERE user_id=u.id) as server_count FROM users u ORDER BY u.id DESC").fetchall()
     return render_template_string(ADMIN_USERS_HTML, users=users, search_query=q)
+
 
 @app.route('/admin/users/<int:user_id>/update', methods=['POST'])
 @admin_permission_required('manage_users')
@@ -1870,6 +1944,7 @@ def admin_update_user(user_id):
     flash(f'User @{un} updated.', 'success')
     return redirect(url_for('admin_users'))
 
+
 @app.route('/admin/users/<int:user_id>/toggle-status', methods=['POST'])
 @admin_permission_required('manage_users')
 def admin_toggle_status(user_id):
@@ -1888,6 +1963,7 @@ def admin_toggle_status(user_id):
     flash(f"@{t['username']} is now {ns}.", 'success')
     return redirect(url_for('admin_users'))
 
+
 @app.route('/admin/users/<int:user_id>/impersonate')
 @admin_permission_required('manage_users')
 def admin_impersonate(user_id):
@@ -1903,6 +1979,7 @@ def admin_impersonate(user_id):
     flash(f"Viewing as @{t['username']}.", 'info')
     return redirect(url_for('dashboard'))
 
+
 @app.route('/admin/stop-impersonate')
 def stop_impersonating():
     if not session.get('is_impersonating'): return redirect(url_for('dashboard'))
@@ -1916,6 +1993,7 @@ def stop_impersonating():
         return redirect(url_for('admin_users'))
     session.clear()
     return redirect(url_for('signin'))
+
 
 @app.route('/admin/payments', methods=['GET', 'POST'])
 @admin_permission_required('manage_settings')
@@ -1941,6 +2019,7 @@ def admin_payments():
             return redirect(url_for('admin_payments'))
     settings = {k: get_setting(k, '') for k in ['upi_phonepe','upi_gpay','upi_paytm','upi_fampay','upi_bhim','upi_amazonpay','fampay_api_key','razorpay_key','upi_primary','upi_primary_app']}
     return render_template_string(ADMIN_PAYMENTS_HTML, settings=settings)
+
 
 @app.route('/admin/settings', methods=['GET', 'POST'])
 @admin_permission_required('manage_settings')
@@ -2007,6 +2086,7 @@ def admin_settings():
     pkgs = db.execute("SELECT * FROM packages ORDER BY sort_order ASC").fetchall()
     return render_template_string(ADMIN_SETTINGS_HTML, settings=settings, packages=pkgs)
 
+
 @app.route('/admin/packages/update', methods=['POST'])
 @admin_permission_required('manage_settings')
 def admin_update_pkg():
@@ -2028,12 +2108,14 @@ def admin_update_pkg():
     flash(f'Package "{name}" updated!', 'success')
     return redirect(url_for('admin_settings'))
 
+
 @app.route('/admin/announcements', methods=['GET'])
 @admin_permission_required('manage_announcements')
 def admin_announcements():
     db = get_db()
     anns = db.execute("SELECT * FROM announcements ORDER BY pinned DESC, id DESC").fetchall()
     return render_template_string(ADMIN_ANNOUNCEMENTS_HTML, announcements=anns)
+
 
 @app.route('/admin/announcements/create', methods=['POST'])
 @admin_permission_required('manage_announcements')
@@ -2053,6 +2135,7 @@ def admin_create_ann():
     flash('Announcement published!', 'success')
     return redirect(url_for('admin_announcements'))
 
+
 @app.route('/admin/announcements/<int:aid>/toggle', methods=['POST'])
 @admin_permission_required('manage_announcements')
 def admin_toggle_ann(aid):
@@ -2064,6 +2147,7 @@ def admin_toggle_ann(aid):
     db.execute("UPDATE announcements SET is_active=? WHERE id=?", (new, aid)); db.commit()
     flash('Toggled.', 'success')
     return redirect(url_for('admin_announcements'))
+
 
 @app.route('/admin/announcements/<int:aid>/toggle-pin', methods=['POST'])
 @admin_permission_required('manage_announcements')
@@ -2077,6 +2161,7 @@ def admin_toggle_pin(aid):
     flash('Toggled pin.', 'success')
     return redirect(url_for('admin_announcements'))
 
+
 @app.route('/admin/announcements/<int:aid>/delete', methods=['POST'])
 @admin_permission_required('manage_announcements')
 def admin_delete_ann(aid):
@@ -2084,6 +2169,7 @@ def admin_delete_ann(aid):
     db.execute("DELETE FROM announcements WHERE id=?", (aid,)); db.commit()
     flash('Deleted.', 'info')
     return redirect(url_for('admin_announcements'))
+
 
 @app.route('/admin/broadcast', methods=['GET', 'POST'])
 @admin_permission_required('manage_broadcasts')
@@ -2122,6 +2208,7 @@ def admin_broadcast():
     logs = db.execute("SELECT * FROM broadcast_logs ORDER BY id DESC LIMIT 30").fetchall()
     return render_template_string(ADMIN_BROADCAST_HTML, users=users, broadcasts=logs)
 
+
 @app.route('/admin/logs')
 @admin_permission_required('view_logs')
 def admin_logs():
@@ -2129,8 +2216,9 @@ def admin_logs():
     logs = db.execute("SELECT * FROM admin_audit_logs ORDER BY id DESC LIMIT 200").fetchall()
     return render_template_string(ADMIN_LOGS_HTML, logs=logs)
 
+
 # ============================================================
-# PROXY ROUTE
+# PROXY
 # ============================================================
 @app.route('/<slug>/', defaults={'path': ''})
 @app.route('/<slug>/<path:path>')
@@ -2158,8 +2246,9 @@ def proxy_server(slug, path):
     except Exception as e:
         return f"Proxy error: {str(e)}", 500
 
+
 # ============================================================
-# STATIC FILES
+# STATIC
 # ============================================================
 @app.route('/style.css')
 def _style():
@@ -2172,6 +2261,12 @@ def _script():
     p = os.path.join(BASE_DIR, 'script.js')
     if os.path.exists(p): return send_file(p, mimetype='application/javascript')
     return "", 404
+    
+    
+    
+    
+    
+    
 
 # ============================================================
 # TEMPLATES
@@ -2184,7 +2279,7 @@ SIGNIN_HTML = """{% extends "base" %}{% block title %}Sign In{% endblock %}{% bl
 
 SIGNUP_HTML = """{% extends "base" %}{% block title %}Sign Up{% endblock %}{% block content %}<div class="auth-wrap"><div class="auth-card"><div class="auth-head"><div class="auth-logo">{% if site_logo_url %}<img src="{{ site_logo_url }}" alt="">{% else %}⚡{% endif %}</div><h1>Create Account</h1><p>Join and get free trial</p></div><form method="POST" action="{{ url_for('signup') }}"><div class="field"><label>Full Name</label><input type="text" name="full_name" value="{{ full_name or '' }}" placeholder="John Doe" required></div><div class="field"><label>Username</label><input type="text" name="username" value="{{ username or '' }}" placeholder="johndoe" required minlength="3"></div><div class="field"><label>Gmail Address</label><input type="email" name="email" value="{{ email or '' }}" placeholder="you@gmail.com" required><small>Only @gmail.com</small></div><div class="field"><label>Password</label><div class="pass-wrap"><input type="password" name="password" id="su-pass" placeholder="Min 6 characters" required minlength="6"><button type="button" class="pass-toggle" onclick="togglePass('su-pass', this)">👁️</button></div></div><div class="field"><label>Confirm Password</label><div class="pass-wrap"><input type="password" name="confirm_password" id="su-cpass" placeholder="Repeat password" required minlength="6"><button type="button" class="pass-toggle" onclick="togglePass('su-cpass', this)">👁️</button></div></div><button type="submit" class="btn-primary btn-block btn-lg">Create Account</button></form><div class="auth-foot">Already have an account? <a href="{{ url_for('signin') }}">Sign in</a></div></div></div>{% endblock %}"""
 
-DASHBOARD_HTML = """{% extends "base" %}{% block title %}Dashboard{% endblock %}{% block content %}<div class="wrap"><div class="welcome-card"><div class="welcome-avatar">{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="">{% else %}{{ (current_user.full_name or current_user.username)[0]|upper }}{% endif %}</div><div><div class="welcome-hi">Welcome back,</div><h1 class="welcome-name">{{ current_user.full_name }}</h1><div class="status-live"><span class="dot-live"></span>Active Account</div></div></div>{% if is_admin %}{% elif trial_active %}<div class="trial-countdown"><div class="trial-countdown-icon">🎁</div><div class="trial-countdown-info"><div class="trial-countdown-title">FREE TRIAL ACTIVE</div><div class="trial-countdown-timer" id="trial-timer" data-expires="{{ current_user.trial_expires_at }}">--:--:--</div></div><a href="{{ url_for('packages') }}" class="btn-primary btn-sm">Upgrade →</a></div>{% elif current_user.plan_id and has_access %}<div class="plan-status-card plan-active"><div class="plan-header"><span class="plan-name-badge active">✅ PLAN ACTIVE</span></div><h2 class="plan-title">{{ access_msg }}</h2><div class="plan-meta-row"><span>Projects: {{ servers|length }} / {% if current_user.project_limit == -1 %}∞{% else %}{{ current_user.project_limit }}{% endif %}</span></div><div class="plan-actions"><a href="{{ url_for('packages') }}" class="btn-secondary btn-sm">⬆️ Upgrade</a></div></div>{% elif not is_admin %}<div class="plan-status-card plan-none"><div class="plan-header"><span class="plan-name-badge none">⚠️ NO PLAN</span></div><h2 class="plan-title">Purchase a Plan</h2><p class="muted">To create projects, you need an active plan.</p><div class="plan-actions"><a href="{{ url_for('packages') }}" class="btn-primary">🚀 View Plans →</a></div></div>{% endif %}{% if announcements %}<div class="ann-stack">{% for a in announcements %}<div class="ann-card ann-{{ a.type }} {% if a.pinned %}ann-pinned{% endif %}"><div class="ann-head"><div class="ann-badges">{% if a.pinned %}<span class="badge badge-warn">📌 PINNED</span>{% endif %}<strong>{{ a.title }}</strong></div><span class="ann-date">{{ a.created_at|format_date }}</span></div><p class="ann-body">{{ a.content }}</p></div>{% endfor %}</div>{% endif %}<div class="section-head-row"><div><h2 class="section-title" style="margin:0;">My Projects ({{ servers|length }})</h2><p class="section-desc">{{ limit_msg }}</p></div>{% if can_create %}<a href="{{ url_for('create_server') }}" class="btn-primary">+ Create Project</a>{% else %}<a href="{{ url_for('packages') }}" class="btn-primary">⬆️ Upgrade to Create</a>{% endif %}</div>{% if servers %}<div class="grid grid-2">{% for s in servers %}<div class="server-card server-{{ s.status }}"><div class="server-top"><div class="server-id"><div class="server-icon">🐍</div><div><h3>{{ s.name }}</h3><span class="server-py">{{ s.runtime }}</span></div></div>{% if s.status == 'running' %}<span class="status status-running"><span class="dot"></span> Running</span>{% elif s.status == 'expired' %}<span class="status status-expired"><span class="dot"></span> Expired</span>{% else %}<span class="status status-stopped"><span class="dot"></span> Stopped</span>{% endif %}</div><div class="server-info"><div><span>Entry:</span><b>{{ s.entry_file or 'Not set' }}</b></div><div><span>Created:</span><span>{{ s.created_at|format_date }}</span></div><div><span>Expires:</span><b>{{ s.expires_at|format_date }}</b></div></div><a href="{{ url_for('server_manage', server_id=s.id) }}" class="btn-primary btn-block">⚙️ Manage Server</a></div>{% endfor %}</div>{% else %}<div class="empty-card"><div style="font-size:3rem;">🚀</div><h3>No Projects Yet</h3><p>Create your first project.</p><a href="{{ url_for('create_server') }}" class="btn-primary">+ Create Project</a></div>{% endif %}</div>{% endblock %}"""
+DASHBOARD_HTML = """{% extends "base" %}{% block title %}Dashboard{% endblock %}{% block content %}<div class="wrap"><div class="welcome-card"><div class="welcome-avatar">{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="">{% else %}{{ (current_user.full_name or current_user.username)[0]|upper }}{% endif %}</div><div><div class="welcome-hi">Welcome back,</div><h1 class="welcome-name">{{ current_user.full_name }}</h1><div class="status-live"><span class="dot-live"></span>Active Account</div></div></div>{% if is_admin %}{% elif trial_active %}<div class="trial-countdown"><div class="trial-countdown-icon">🎁</div><div class="trial-countdown-info"><div class="trial-countdown-title">FREE TRIAL ACTIVE</div><div class="trial-countdown-timer" id="trial-timer" data-expires="{{ current_user.trial_expires_at }}">--:--:--</div></div><a href="{{ url_for('packages') }}" class="btn-primary btn-sm">Upgrade →</a></div>{% elif current_user.plan_id and has_access %}<div class="plan-status-card plan-active"><div class="plan-header"><span class="plan-name-badge active">✅ PLAN ACTIVE</span></div><h2 class="plan-title">{{ access_msg }}</h2><div class="plan-meta-row"><span>Projects: {{ servers|length }} / {% if current_user.project_limit == -1 %}∞{% else %}{{ current_user.project_limit }}{% endif %}</span></div><div class="plan-actions"><a href="{{ url_for('packages') }}" class="btn-secondary btn-sm">⬆️ Upgrade</a></div></div>{% else %}<div class="plan-status-card plan-none"><div class="plan-header"><span class="plan-name-badge none">⚠️ NO PLAN</span></div><h2 class="plan-title">Purchase a Plan</h2><p class="muted">To create projects, you need an active plan.</p><div class="plan-actions"><a href="{{ url_for('packages') }}" class="btn-primary">🚀 View Plans →</a></div></div>{% endif %}{% if announcements %}<div class="ann-stack">{% for a in announcements %}<div class="ann-card ann-{{ a.type }} {% if a.pinned %}ann-pinned{% endif %}"><div class="ann-head"><div class="ann-badges">{% if a.pinned %}<span class="badge badge-warn">📌 PINNED</span>{% endif %}<strong>{{ a.title }}</strong></div><span class="ann-date">{{ a.created_at|format_date }}</span></div><p class="ann-body">{{ a.content }}</p></div>{% endfor %}</div>{% endif %}<div class="section-head-row"><div><h2 class="section-title" style="margin:0;">My Projects ({{ servers|length }})</h2><p class="section-desc">{{ limit_msg }}</p></div>{% if can_create %}<a href="{{ url_for('create_server') }}" class="btn-primary">+ Create Project</a>{% else %}<a href="{{ url_for('packages') }}" class="btn-primary">⬆️ Upgrade to Create</a>{% endif %}</div>{% if servers %}<div class="grid grid-2">{% for s in servers %}<div class="server-card server-{{ s.status }}"><div class="server-top"><div class="server-id"><div class="server-icon">🐍</div><div><h3>{{ s.name }}</h3><span class="server-py">{{ s.runtime }}</span></div></div>{% if s.status == 'running' %}<span class="status status-running"><span class="dot"></span> Running</span>{% elif s.status == 'expired' %}<span class="status status-expired"><span class="dot"></span> Expired</span>{% else %}<span class="status status-stopped"><span class="dot"></span> Stopped</span>{% endif %}</div><div class="server-info"><div><span>Entry:</span><b>{{ s.entry_file or 'Not set' }}</b></div><div><span>Created:</span><span>{{ s.created_at|format_date }}</span></div><div><span>Expires:</span><b>{{ s.expires_at|format_date }}</b></div></div><a href="{{ url_for('server_manage', server_id=s.id) }}" class="btn-primary btn-block">⚙️ Manage Server</a></div>{% endfor %}</div>{% else %}<div class="empty-card"><div style="font-size:3rem;">🚀</div><h3>No Projects Yet</h3><p>Create your first project.</p><a href="{{ url_for('create_server') }}" class="btn-primary">+ Create Project</a></div>{% endif %}</div>{% endblock %}"""
 
 PACKAGES_HTML = """{% extends "base" %}{% block title %}Packages{% endblock %}{% block content %}<div class="wrap"><div class="section-head"><h1 class="section-title">Choose Your Plan</h1><p class="section-desc">Simple pricing. No hidden fees.</p></div><div class="grid grid-3">{% for pkg in packages %}{% if pkg.is_trial and trial_enabled and not is_admin %}<div class="pkg-card pkg-trial"><div class="pkg-ribbon pkg-ribbon-trial">🎁 FREE TRIAL</div><h3>{{ pkg.name }}</h3><div class="pkg-price-block"><span class="pkg-price" style="color:#10B981;">₹0</span><span class="pkg-period">/ {{ pkg.trial_hours }} hours</span></div><ul class="pkg-list">{% for f in pkg.features.split(',') %}<li>{{ f.strip() }}</li>{% endfor %}</ul>{% if user.trial_used %}<button class="btn-secondary btn-block" disabled>Trial Already Used</button>{% else %}<a href="{{ url_for('signup') }}" class="btn-success btn-block">Start Free Trial</a>{% endif %}</div>{% elif not pkg.is_trial %}<div class="pkg-card {% if pkg.is_popular %}pkg-featured{% endif %}">{% if pkg.is_popular %}<div class="pkg-ribbon">⭐ POPULAR</div>{% endif %}<h3>{{ pkg.name }}</h3><div class="pkg-price-block"><span class="pkg-price">₹{{ pkg.price }}</span><span class="pkg-period">/ {{ pkg.days }} days</span></div><ul class="pkg-list">{% for f in pkg.features.split(',') %}<li>{{ f.strip() }}</li>{% endfor %}</ul>{% if is_admin %}<button class="btn-secondary btn-block" disabled>👑 Owner Access</button>{% elif user.plan_id == pkg.id %}<button class="btn-secondary btn-block" disabled>✅ Current Plan</button>{% elif user.plan_id and user.plan_expires_at %}<a href="{{ url_for('buy_redirect', pkg_id=pkg.id) }}" class="btn-primary btn-block">⬆️ Upgrade → ₹{{ pkg.price }}</a>{% else %}<a href="{{ url_for('buy_redirect', pkg_id=pkg.id) }}" class="btn-primary btn-block">Buy Now → ₹{{ pkg.price }}</a>{% endif %}</div>{% endif %}{% endfor %}</div></div>{% endblock %}"""
 
@@ -2194,74 +2289,4 @@ PAYMENT_HTML = """{% extends "base" %}{% block title %}Payment{% endblock %}{% b
 
 CREATE_SERVER_HTML = """{% extends "base" %}{% block title %}Create Project{% endblock %}{% block content %}<div class="wrap" style="max-width:540px;"><div class="back-row"><a href="{{ url_for('dashboard') }}" class="back-btn">← Back</a></div><div class="card" style="padding:28px 24px;"><h1 style="margin:0 0 4px;">Create New Project</h1><p class="muted" style="margin-bottom:22px;">{{ limit_msg }}</p><form method="POST" action="{{ url_for('create_server') }}"><div class="field"><label>Project Name</label><input type="text" name="name" placeholder="My Telegram Bot" required><small>Give your project a name.</small></div><div class="feature-list-box"><b>After creating:</b><div class="grid grid-2" style="gap:6px;margin-top:8px;"><div>✓ Upload your files</div><div>✓ Auto-detect runtime</div><div>✓ Install dependencies</div><div>✓ Get your URL</div></div></div><button type="submit" class="btn-primary btn-block btn-lg">🚀 Create Project</button></form></div></div>{% endblock %}"""
 
-SERVER_MANAGE_HTML = """{% extends "base" %}{% block title %}{{ server.name }}{% endblock %}{% block content %}<div class="wrap"><div class="back-row"><a href="{{ url_for('dashboard') }}" class="back-btn">← Back</a></div><div class="card server-header-card"><div><div class="server-tag">Server #{{ server.id }}</div><h1>Server: <span class="gradient-text">{{ server.name }}</span></h1></div><div class="server-header-right"><span id="status-badge" class="status status-{{ server.status }}">{% if server.status=='running' %}🟢 RUNNING{% elif server.status=='package_required' %}🟡 SETUP{% else %}🔴 STOPPED{% endif %}</span></div></div><div class="url-card" id="url-card" style="display:none;"><div class="url-card-label">🌐 YOUR PROJECT URL</div><div class="url-row"><input type="text" id="server-url-input" readonly class="url-input"><button onclick="copyServerUrl()" class="btn-primary btn-sm">📋 Copy</button><a id="open-url-btn" href="#" target="_blank" class="btn-secondary btn-sm">🔗 Open</a></div></div><div class="subnav"><a href="{{ url_for('server_manage', server_id=server.id) }}" class="subnav-item active">📊 Logs</a><a href="{{ url_for('file_manager', server_id=server.id) }}" class="subnav-item">📁 Files</a></div><div class="card"><div class="ops-head"><h2>Server Operations</h2><span id="pid-badge" class="pid-badge {% if server.status=='running' and server.pid %}pid-on{% endif %}">PID: {% if server.status=='running' and server.pid %}{{ server.pid }}{% else %}Offline{% endif %}</span></div><div class="ops-grid"><button id="btn-start" onclick="serverAction({{ server.id }}, 'start')" class="btn-success" {% if server.status == 'running' %}disabled{% endif %}>🟢 START</button><button id="btn-restart" onclick="serverAction({{ server.id }}, 'restart')" class="btn-warning">🟠 RESTART</button><button id="btn-stop" onclick="serverAction({{ server.id }}, 'stop')" class="btn-danger" {% if server.status in ['stopped','package_required'] %}disabled{% endif %}>🔴 STOP</button></div><div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;"><button onclick="if(confirm('Delete this project and ALL its files? This cannot be undone.')){fetch('/api/servers/{{ server.id }}/delete',{method:'POST'}).then(r=>r.json()).then(d=>{if(d.success){showToast(d.message,'success');setTimeout(()=>window.location.href='/dashboard',1200);}else{showToast(d.message,'danger');}});}" class="btn-danger-outline btn-sm">🗑️ Delete Project</button></div></div><div class="card"><div class="ops-head"><div style="display:flex;align-items:center;gap:8px;"><h2 style="margin:0;">📜 Server Console</h2><span class="dot-pulse"></span></div><button onclick="clearLogs({{ server.id }})" class="btn-secondary btn-sm">🧹 Clear</button></div><div id="terminal" class="terminal" data-server-id="{{ server.id }}"><div class="log-line log-info">[INFO] Waiting for server...</div></div><div class="terminal-input-row"><input type="text" id="terminal-input" placeholder="Type command..." onkeydown="if(event.key==='Enter'){sendTerminalCommand();}"><button onclick="sendTerminalCommand()" class="btn-primary">▶ Run</button></div><div class="quick-cmds"><button onclick="quickCommand('ls -la')" class="btn-secondary btn-sm">📁 ls</button><button onclick="quickCommand('pip list')" class="btn-secondary btn-sm">📋 pip list</button><button onclick="quickCommand('python --version')" class="btn-secondary btn-sm">🐍 Python</button></div></div><div class="meta-grid"><div class="stat-card"><div class="stat-label">Entry File</div><div class="stat-value mono" style="font-size:0.9rem;">{{ server.entry_file or 'Not set' }}</div></div><div class="stat-card"><div style="display:flex;justify-content:space-between;"><div class="stat-label">Status</div><div id="uptime-tick" class="mono-tick">00:00:00</div></div><div style="display:flex;align-items:center;gap:6px;margin-top:3px;"><span id="status-dot" class="status-dot {% if server.status=='running' %}on{% endif %}"></span><span id="status-text" class="status-text {% if server.status=='running' %}on{% endif %}">{% if server.status=='running' %}Running{% else %}Offline{% endif %}</span></div></div><div class="stat-card"><div class="stat-label">Remaining</div><div class="stat-value {% if remaining_days < 2 %}danger-text{% endif %}">{{ remaining_days }} Days</div></div><div class="stat-card"><div class="stat-label">Expires</div><div class="stat-value" style="font-size:0.85rem;">{{ server.expires_at|format_date }}</div></div></div></div>{% endblock %}{% block scripts %}<script>startLogStream({{ server.id }}, {{ start_time or 0 }});</script>{% endblock %}"""
-
-FILE_MANAGER_HTML = """{% extends "base" %}{% block title %}Files: {{ server.name }}{% endblock %}{% block content %}<div class="wrap"><div class="back-row"><a href="{{ url_for('server_manage', server_id=server.id) }}" class="back-btn">← Back to Server</a></div><div class="card server-header-card"><div><div class="server-tag">Server #{{ server.id }}</div><h1>Files: <span class="gradient-text">{{ server.name }}</span></h1></div><span class="status status-{{ server.status }}">{% if server.status=='running' %}🟢 RUNNING{% else %}🔴 STOPPED{% endif %}</span></div><div class="card"><div class="fm-toolbar"><div class="fm-toolbar-actions"><label class="btn-primary btn-sm">📦 Upload ZIP<input type="file" accept=".zip" style="display:none;" onchange="uploadFile({{ server.id }}, this, true)"></label><label class="btn-secondary btn-sm">📤 Upload<input type="file" multiple style="display:none;" onchange="uploadFile({{ server.id }}, this, false)"></label><button onclick="promptFolder({{ server.id }})" class="btn-secondary btn-sm">📁 Folder</button><button onclick="promptFile({{ server.id }})" class="btn-secondary btn-sm">➕ File</button></div><div class="fm-search"><span class="fm-search-icon">🔍</span><input type="text" id="fm-search-input" placeholder="Search files..."></div></div><div class="breadcrumbs"><a href="{{ url_for('file_manager', server_id=server.id) }}">🏠 root</a>{% for bc in breadcrumbs %}<span>/</span><a href="{{ url_for('file_manager', server_id=server.id, path=bc.path) }}">{{ bc.name }}</a>{% endfor %}</div><div class="fm-table-wrap"><div class="fm-table-head"><div></div><div class="sortable" onclick="sortFiles('name')">Name {% if sort_field=='name' %}{% if sort_order=='asc' %}▲{% else %}▼{% endif %}{% endif %}</div><div class="sortable" onclick="sortFiles('size')">Size {% if sort_field=='size' %}{% if sort_order=='asc' %}▲{% else %}▼{% endif %}{% endif %}</div><div class="sortable" onclick="sortFiles('date')">Modified {% if sort_field=='date' %}{% if sort_order=='asc' %}▲{% else %}▼{% endif %}{% endif %}</div><div></div></div><div class="fm-bulk-bar" id="fm-bulk-bar"><span><b id="fm-selected-count">0</b> selected</span><div class="fm-bulk-actions"><button onclick="bulkDelete({{ server.id }})" class="btn-danger btn-sm">🗑️ Delete</button></div></div>{% if items %}{% for item in items %}<div class="fm-table-row" data-name="{{ item.name }}"><input type="checkbox" class="fm-checkbox" data-path="{{ (current_path + '/' + item.name) if current_path else item.name }}"><div class="fm-name-cell"><div class="fm-icon">{% if item.is_dir %}📁{% elif item.is_zip %}📦{% elif item.is_py %}🐍{% elif item.name.endswith('.json') %}⚙️{% elif item.name.endswith('.log') %}📋{% elif item.name.endswith(('.png','.jpg','.jpeg','.svg','.gif','.webp')) %}🖼️{% else %}📄{% endif %}</div><div>{% if item.is_dir %}<a href="{{ url_for('file_manager', server_id=server.id, path=(current_path + '/' + item.name) if current_path else item.name) }}" class="fm-name fm-name-dir">{{ item.name }}</a>{% else %}<span class="fm-name" onclick="openEditor({{ server.id }}, '{{ (current_path + '/' + item.name) if current_path else item.name }}')">{{ item.name }}</span>{% endif %}{% if item.is_entry %}<span class="entry-tag">ENTRY</span>{% endif %}<div class="fm-sub">{{ item.size }}</div></div></div><div class="fm-size">{{ item.size if not item.is_dir else '-' }}</div><div class="fm-modified">{{ item.modified }}</div><div class="fm-actions-cell"><div class="dd-wrap"><button class="dd-trigger" style="padding:6px 10px;font-size:1.1rem;">⋮</button><div class="dd-popover">{% set fp = (current_path + '/' + item.name) if current_path else item.name %}{% if item.is_zip %}<button onclick="unzipItem({{ server.id }}, '{{ fp }}')" class="dd-item primary-text">📦 Unzip</button>{% endif %}{% if not item.is_dir %}<button onclick="openEditor({{ server.id }}, '{{ fp }}')" class="dd-item">✏️ Edit</button><a href="{{ url_for('download_file', server_id=server.id, path=fp) }}" class="dd-item">⬇️ Download</a>{% endif %}<button onclick="renameItem({{ server.id }}, '{{ fp }}')" class="dd-item">🏷️ Rename</button><button onclick="deleteItem({{ server.id }}, '{{ fp }}')" class="dd-item danger">🗑️ Delete</button></div></div></div></div>{% endfor %}{% else %}<div class="fm-empty"><div class="fm-empty-icon">📁</div><h3>No files yet</h3><p>Upload your project files or ZIP archive to begin.</p></div>{% endif %}</div>{% if total_pages > 1 %}<div class="pagination">{% if current_page > 1 %}<a href="?path={{ current_path }}&page={{ current_page - 1 }}&sort={{ sort_field }}&order={{ sort_order }}" class="page-btn">← Prev</a>{% endif %}<span class="page-btn active">{{ current_page }} / {{ total_pages }}</span>{% if current_page < total_pages %}<a href="?path={{ current_path }}&page={{ current_page + 1 }}&sort={{ sort_field }}&order={{ sort_order }}" class="page-btn">Next →</a>{% endif %}</div>{% endif %}</div><div id="up-modal" class="modal-overlay" style="display:none;"><div class="modal-card" style="max-width:420px;text-align:center;"><div class="up-icon" id="up-icon">📤</div><h3 id="up-title">Uploading...</h3><p id="up-sub" class="muted">Please wait.</p><div class="progress-track"><div id="up-bar" class="progress-bar" style="width:0%;"></div></div><div style="display:flex;justify-content:space-between;font-size:0.8rem;font-weight:700;margin-top:8px;"><span id="up-pct" class="primary-text">0%</span><span id="up-size">0 KB / 0 KB</span></div></div></div><div id="editor-modal" class="modal-overlay" style="display:none;"><div class="modal-card" style="max-width:780px;height:85vh;display:flex;flex-direction:column;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 id="ed-file" style="margin:0;">File Editor</h3><button onclick="document.getElementById('editor-modal').style.display='none'" class="modal-x" style="position:static;">&times;</button></div><input type="hidden" id="ed-path"><textarea id="ed-content" class="code-editor" spellcheck="false"></textarea><div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;"><button onclick="document.getElementById('editor-modal').style.display='none'" class="btn-secondary btn-sm">Cancel</button><button onclick="saveEditor({{ server.id }})" class="btn-primary btn-sm">💾 Save</button></div></div></div></div>{% endblock %}"""
-
-ACCOUNT_HTML = """{% extends "base" %}{% block title %}Account{% endblock %}{% block content %}<div class="wrap" style="max-width:680px;"><div class="card"><div class="acc-head"><div class="acc-avatar-wrap"><label for="quick_avatar" style="cursor:pointer;"><div class="acc-avatar">{% if user.avatar_url %}<img src="{{ user.avatar_url }}" alt="">{% else %}{{ (user.full_name or user.username)[0]|upper }}{% endif %}</div><div class="acc-cam">📷</div></label><form id="quick_avatar_form" action="{{ url_for('account') }}" method="POST" enctype="multipart/form-data" style="display:none;"><input type="hidden" name="action" value="upload_avatar"><input type="file" id="quick_avatar" name="avatar" accept="image/*" onchange="document.getElementById('quick_avatar_form').submit();"></form></div><div class="acc-info"><h1>{{ user.full_name }}</h1><span class="status-pill">● {{ user.status|capitalize }}</span></div></div><div class="acc-grid"><div><span>Registered:</span><b>{{ user.created_at|format_date }}</b></div><div><span>Role:</span><b class="primary-text">{{ user.role|capitalize }}</b></div><div><span>Projects:</span><b>{{ user.project_limit if user.project_limit >= 0 else '∞' }}</b></div></div></div><div class="card"><h2>Edit Profile</h2><form action="{{ url_for('account') }}" method="POST"><input type="hidden" name="action" value="update_profile"><div class="field"><label>Full Name</label><input type="text" name="full_name" value="{{ user.full_name }}" required></div><div class="field"><label>Username</label><input type="text" value="{{ user.username }}" readonly class="readonly"></div><div class="field"><label>Gmail</label><input type="email" value="{{ user.email }}" readonly class="readonly"></div><div class="field"><label>Bio</label><input type="text" name="bio" value="{{ user.bio or '' }}" placeholder="Python Developer"></div><button type="submit" class="btn-primary">Save</button></form></div><div class="card"><h2>Change Password</h2><form action="{{ url_for('account') }}" method="POST"><input type="hidden" name="action" value="change_password"><div class="field"><label>Current Password</label><input type="password" name="current_password" required></div><div class="field"><label>New Password</label><input type="password" name="new_password" required minlength="6"></div><div class="field"><label>Confirm New Password</label><input type="password" name="confirm_new_password" required minlength="6"></div><button type="submit" class="btn-primary">Update Password</button></form></div></div>{% endblock %}"""
-
-ADMIN_DASHBOARD_HTML = """{% extends "base" %}{% block title %}Admin Console{% endblock %}{% block content %}<div class="wrap"><div class="admin-hero"><div style="display:flex;align-items:center;gap:14px;"><div class="admin-hero-icon">👑</div><div><span class="admin-hero-label">ROOT ADMINISTRATION</span><h1>{{ site_name }} Control Center</h1></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;"><a href="{{ url_for('admin_orders') }}" class="btn-glass">💳 Orders</a><a href="{{ url_for('admin_users') }}" class="btn-glass">👥 Users</a><a href="{{ url_for('admin_payments') }}" class="btn-glass">💰 Payments</a><a href="{{ url_for('admin_settings') }}" class="btn-glass-solid">⚙️ Settings</a></div></div><div class="stats-grid"><div class="stat-card"><div class="stat-label">Today Revenue</div><div class="stat-value gold-text">₹{{ today_revenue }}</div></div><div class="stat-card"><div class="stat-label">Total Revenue</div><div class="stat-value gold-text">₹{{ total_revenue }}</div></div><div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-value">{{ total_users }}</div><div class="stat-hint hint-green">{{ active_users }} active</div></div><div class="stat-card"><div class="stat-label">Total Servers</div><div class="stat-value">{{ total_servers }}</div><div class="stat-hint hint-blue">{{ running_servers }} running</div></div><div class="stat-card"><div class="stat-label">Trial Users</div><div class="stat-value">{{ trial_users }}</div></div><div class="stat-card"><div class="stat-label">Pending Orders</div><div class="stat-value">{{ pending_orders }}</div></div><div class="stat-card"><div class="stat-label">Conversion</div><div class="stat-value">{{ conversion_rate }}%</div></div><div class="stat-card"><div class="stat-label">Storage</div><div class="stat-value" style="font-size:1rem;">{{ total_storage_formatted }}</div></div></div><div class="grid grid-3" style="margin-bottom:20px;">{% if is_super_admin or has_admin_permission(current_user, 'manage_orders') %}<a href="{{ url_for('admin_orders') }}" class="quick-link"><span style="font-size:1.5rem;">💳</span><div><b>Orders</b><span>View & approve</span></div></a>{% endif %}{% if is_super_admin or has_admin_permission(current_user, 'manage_users') %}<a href="{{ url_for('admin_users') }}" class="quick-link"><span style="font-size:1.5rem;">👥</span><div><b>Users</b><span>Manage accounts</span></div></a>{% endif %}{% if is_super_admin or has_admin_permission(current_user, 'manage_orders') %}<a href="{{ url_for('admin_plans') }}" class="quick-link"><span style="font-size:1.5rem;">📋</span><div><b>Plan History</b><span>Activations</span></div></a>{% endif %}{% if is_super_admin or has_admin_permission(current_user, 'manage_orders') %}<a href="{{ url_for('admin_trials') }}" class="quick-link"><span style="font-size:1.5rem;">🎁</span><div><b>Trials</b><span>IP tracking</span></div></a>{% endif %}{% if is_super_admin or has_admin_permission(current_user, 'manage_orders') %}<a href="{{ url_for('admin_notifications_page') }}" class="quick-link" style="border-color:#C7D2FE;background:#EEF2FF;"><span style="font-size:1.5rem;">🔔</span><div><b>Notifications</b><span>Recent events</span></div></a>{% endif %}{% if is_super_admin or has_admin_permission(current_user, 'manage_settings') %}<a href="{{ url_for('admin_settings') }}" class="quick-link"><span style="font-size:1.5rem;">⚙️</span><div><b>Settings</b><span>Site config</span></div></a>{% endif %}</div>{% if recent_notifications %}<div class="card"><h3 style="margin-bottom:12px;">🔔 Recent Activity</h3>{% for n in recent_notifications %}<div class="mini-row"><div><div style="font-weight:700;">{{ n.title }}</div><div class="muted-sm">{{ n.message }}</div></div></div>{% endfor %}</div>{% endif %}<div class="grid grid-2"><div class="card"><h3 style="margin-bottom:14px;">Recent Users</h3><div style="display:flex;flex-direction:column;gap:8px;">{% for u in recent_users %}<div class="mini-row"><div><div style="font-weight:700;">{{ u.full_name }} <span class="muted">@{{ u.username }}</span></div><div class="muted-sm">{{ u.email }}</div></div><span class="status-pill-sm {% if u.status=='active' %}on{% endif %}">{{ u.status|upper }}</span></div>{% endfor %}</div></div><div class="card"><h3 style="margin-bottom:14px;">Recent Activity</h3><div style="display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;">{% for log in recent_logs %}<div class="mini-row" style="flex-direction:column;align-items:stretch;"><div style="display:flex;justify-content:space-between;font-size:0.7rem;color:#64748B;"><b class="primary-text">{{ log.action }}</b><span>{{ log.created_at|format_datetime }}</span></div><div style="font-size:0.8rem;">{{ log.details }}</div></div>{% endfor %}</div></div></div></div>{% endblock %}"""
-
-ADMIN_ORDERS_HTML = """{% extends "base" %}{% block title %}Orders{% endblock %}{% block content %}<div class="wrap"><div class="admin-hero"><div><a href="{{ url_for('admin_dashboard') }}" class="admin-back">← Admin</a><h1>💳 Orders & Payments</h1></div><div class="stat-chip">{{ orders|length }} Orders</div></div><div class="card"><div style="display:flex;gap:8px;flex-wrap:wrap;"><a href="?status=all" class="btn-secondary btn-sm">All</a><a href="?status=pending" class="btn-secondary btn-sm">Pending</a><a href="?status=paid" class="btn-secondary btn-sm">Paid</a><a href="?status=failed" class="btn-secondary btn-sm">Failed</a></div></div><div>{% for o in orders %}<div class="order-card order-{{ o.status }}"><div class="order-head"><div><span class="order-id">#{{ o.id }}</span><span class="order-status {{ o.status }}">{{ o.status|upper }}</span></div><div class="order-amount">₹{{ o.amount }}</div></div><div class="order-row"><span>User</span><b>{{ o.full_name }} (@{{ o.username }})</b></div><div class="order-row"><span>Email</span><span>{{ o.email }}</span></div><div class="order-row"><span>Plan</span><b>{{ o.pkg_name }}</b></div>{% if o.payment_ref %}<div class="order-row"><span>TXN ID</span><code>{{ o.payment_ref }}</code></div>{% endif %}<div class="order-row"><span>Created</span><span>{{ o.created_at|format_datetime }}</span></div>{% if o.status == 'pending' %}<div style="display:flex;gap:8px;margin-top:12px;"><form action="{{ url_for('admin_approve_order', order_id=o.id) }}" method="POST" style="flex:1;"><button type="submit" class="btn-success btn-block btn-sm">✅ Approve & Activate</button></form><form action="{{ url_for('admin_reject_order', order_id=o.id) }}" method="POST" style="flex:1;" onsubmit="return confirm('Reject this order?');"><button type="submit" class="btn-danger-outline btn-block btn-sm">❌ Reject</button></form></div>{% endif %}</div>{% else %}<div class="card" style="text-align:center;padding:40px;"><h3>No Orders</h3></div>{% endfor %}</div></div>{% endblock %}"""
-
-ADMIN_PLANS_HTML = """{% extends "base" %}{% block title %}Plan History{% endblock %}{% block content %}<div class="wrap"><div class="admin-hero"><div><a href="{{ url_for('admin_dashboard') }}" class="admin-back">← Admin</a><h1>📋 Plan Activation History</h1></div></div><div class="card">{% for h in history %}<div class="mini-row"><div><b>{{ h.full_name }}</b> <span class="muted">@{{ h.username }}</span><br><span class="muted-sm">{{ h.pkg_name }} — {{ h.action }} — ₹{{ h.amount }}</span></div><div style="text-align:right;"><div class="muted-sm">{{ h.created_at|format_datetime }}</div></div></div>{% else %}<div class="empty-mini">No plan history.</div>{% endfor %}</div></div>{% endblock %}"""
-
-ADMIN_TRIALS_HTML = """{% extends "base" %}{% block title %}Trials{% endblock %}{% block content %}<div class="wrap"><div class="admin-hero"><div><a href="{{ url_for('admin_dashboard') }}" class="admin-back">← Admin</a><h1>🎁 Trial Tracking</h1></div><div class="stat-chip">{{ converted }}/{{ total }} converted</div></div><div class="card">{% for t in trials %}<div class="mini-row"><div><b>{{ t.full_name }}</b> <span class="muted">@{{ t.username }}</span><br><span class="muted-sm">IP: <code>{{ t.ip_address }}</code> • Started: {{ t.started_at|format_datetime }}</span></div><div style="text-align:right;">{% if t.converted_to_plan %}<span class="badge badge-success">✅ Converted</span>{% else %}<span class="badge badge-gray">Not converted</span>{% endif %}</div></div>{% else %}<div class="empty-mini">No trials.</div>{% endfor %}</div></div>{% endblock %}"""
-
-ADMIN_NOTIFICATIONS_HTML = """{% extends "base" %}{% block title %}Notifications{% endblock %}{% block content %}<div class="wrap"><div class="admin-hero"><div><a href="{{ url_for('admin_dashboard') }}" class="admin-back">← Admin</a><h1>🔔 Admin Notifications</h1></div></div><div class="card">{% for n in notifications %}<div class="mini-row"><div><div style="font-weight:700;">{{ n.title }}</div><div class="muted-sm">{{ n.message }}</div></div><div style="text-align:right;"><span class="muted-sm">{{ n.created_at|format_datetime }}</span></div></div>{% else %}<div class="empty-mini">No notifications.</div>{% endfor %}</div></div>{% endblock %}"""
-
-ADMIN_USERS_HTML = """{% extends "base" %}{% block title %}Users{% endblock %}{% block content %}<div class="wrap"><div class="admin-hero"><div><a href="{{ url_for('admin_dashboard') }}" class="admin-back">← Admin</a><h1>👥 User Management</h1></div><div class="stat-chip">Total: <b>{{ users|length }}</b></div></div><div class="card"><form method="GET" style="display:flex;gap:10px;"><input type="text" name="q" value="{{ search_query or '' }}" placeholder="🔍 Search..." class="input-flex"><button type="submit" class="btn-primary">Search</button></form></div><div>{% for u in users %}{% set u_super = u.role == 'super_admin' or u.is_super_admin %}{% set u_admin = u_super or u.role == 'admin' or u.is_admin %}<div class="user-card {% if u.status=='disabled' %}user-disabled{% elif u_super %}user-super{% elif u_admin %}user-admin{% endif %}"><div class="user-head"><div class="user-id"><div class="user-avatar-lg {% if u_super %}av-super{% elif u_admin %}av-admin{% endif %}">{% if u.avatar_url %}<img src="{{ u.avatar_url }}" alt="">{% elif u_super %}👑{% elif u_admin %}🛡️{% else %}{{ u.username[0]|upper }}{% endif %}</div><div><div class="user-name-row"><h3>{{ u.full_name }}</h3><span class="status-pill-sm {% if u.status=='active' %}on{% else %}off{% endif %}">{{ u.status|upper }}</span>{% if u_super %}<span class="role-badge role-super">👑 SUPER</span>{% elif u_admin %}<span class="role-badge role-admin">🛡️ ADMIN</span>{% endif %}</div><div class="muted-sm">@{{ u.username }} • {{ u.email }} • Limit: {{ u.project_limit if u.project_limit >= 0 else '∞' }}</div></div></div><div class="user-metrics"><div class="metric">🖥️ {{ u.server_count }}</div>{% if is_super_admin or not u_super %}<button type="button" class="btn-secondary btn-sm" onclick="openEditUser({{ u.id }}, '{{ u.full_name|e }}', '{{ u.username|e }}', '{{ u.email|e }}', '{{ (u.bio or '')|e }}', {{ u.project_limit }}, '{{ u.role }}', '{{ u.status }}', '{{ (u.admin_permissions or '')|e }}', {{ 'true' if u_super else 'false' }})">✏️ Edit</button>{% endif %}{% if u.id != current_user.id %}<a href="{{ url_for('admin_impersonate', user_id=u.id) }}" class="btn-secondary btn-sm">🛡️ Open</a>{% if is_super_admin or not u_admin %}<form action="{{ url_for('admin_toggle_status', user_id=u.id) }}" method="POST" style="display:inline;">{% if u.status == 'active' %}<button type="submit" class="btn-danger btn-sm" onclick="return confirm('Disable?')">🔒</button>{% else %}<button type="submit" class="btn-success btn-sm" onclick="return confirm('Activate?')">🔓</button>{% endif %}</form>{% endif %}{% endif %}</div></div></div>{% else %}<div class="card" style="text-align:center;padding:40px;"><h3>No users found</h3></div>{% endfor %}</div></div><div id="edit-user-modal" class="modal-overlay" style="display:none;"><div class="modal-card" style="max-width:580px;max-height:90vh;overflow-y:auto;"><div style="display:flex;justify-content:space-between;margin-bottom:16px;"><h2 style="margin:0;">Edit User</h2><button onclick="closeEditUser()" class="modal-x" style="position:static;">✕</button></div><form id="edit-user-form" method="POST"><div class="grid grid-2" style="gap:12px;"><div class="field span-2"><label>Full Name</label><input type="text" id="eu_name" name="full_name" required></div><div class="field"><label>Username</label><input type="text" id="eu_user" name="username" required minlength="3"></div><div class="field"><label>Gmail</label><input type="email" id="eu_email" name="email" required></div><div class="field"><label>Project Limit (-1=∞)</label><input type="number" id="eu_coins" name="project_limit" min="-1" required></div><div class="field"><label>Role</label>{% if is_super_admin %}<select id="eu_role" name="role" onchange="togglePermBlock(this.value)"><option value="user">Standard User</option><option value="admin">Sub-Admin</option><option value="super_admin">Super Admin</option></select>{% else %}<select disabled><option>User</option></select>{% endif %}</div>{% if is_super_admin %}<div id="perm-block" class="field span-2" style="display:none;background:#F8FAFC;padding:14px;border-radius:10px;"><label>Permissions</label><div class="grid grid-2" style="gap:8px;"><label class="check"><input type="checkbox" name="permissions" value="manage_users" id="p_users"> 👥 Users</label><label class="check"><input type="checkbox" name="permissions" value="manage_coins" id="p_coins"> 💰 Payments</label><label class="check"><input type="checkbox" name="permissions" value="manage_files" id="p_files"> 📁 Files</label><label class="check"><input type="checkbox" name="permissions" value="manage_settings" id="p_settings"> ⚙️ Settings</label><label class="check"><input type="checkbox" name="permissions" value="manage_announcements" id="p_ann"> 📢 Announcements</label><label class="check"><input type="checkbox" name="permissions" value="manage_broadcasts" id="p_bcast"> ⚡ Broadcast</label><label class="check"><input type="checkbox" name="permissions" value="manage_orders" id="p_orders"> 💳 Orders</label><label class="check"><input type="checkbox" name="permissions" value="view_logs" id="p_logs"> 📜 Logs</label></div></div>{% endif %}<div class="field span-2"><label>Status</label><select id="eu_status" name="status"><option value="active">Active</option><option value="disabled">Disabled</option></select></div><div class="field span-2"><label>Bio</label><input type="text" id="eu_bio" name="bio"></div><div class="field span-2" style="background:#F8FAFC;padding:12px;border-radius:8px;"><label>Password Reset (optional)</label><input type="password" id="eu_pass" name="new_password" minlength="6"></div></div><div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;"><button type="button" onclick="closeEditUser()" class="btn-secondary">Cancel</button><button type="submit" class="btn-primary">Save</button></div></form></div></div>{% endblock %}"""
-
-ADMIN_PAYMENTS_HTML = """{% extends "base" %}{% block title %}Payment Settings{% endblock %}{% block content %}<div class="wrap"><div class="admin-hero"><div><a href="{{ url_for('admin_dashboard') }}" class="admin-back">← Admin</a><h1>💰 Payment Settings</h1><p style="color:#C7D2FE;font-size:0.8rem;margin-top:4px;">UPI IDs detect + QR generate</p></div></div><div class="payment-owner-section"><h2>📱 UPI Payment IDs</h2><p>Add UPI IDs for each app. Selected primary will show QR to users.</p><form method="POST"><input type="hidden" name="action" value="update_upi"><div class="payment-app-grid">{% for app_key, app_name, placeholder in [('phonepe','📱 PhonePe','example@ybl'),('gpay','🅶 Google Pay','example@okaxis'),('paytm','💳 Paytm','example@paytm'),('fampay','💰 FamPay','example@fam'),('bhim','🇮🇳 BHIM','example@upi'),('amazonpay','📦 Amazon Pay','example@apl')] %}<div class="payment-app-item {% if settings['upi_' + app_key] %}enabled{% endif %}"><div class="payment-app-header"><div class="payment-app-name"><span class="payment-app-icon">{{ app_name.split(' ')[0] }}</span>{{ app_name.split(' ', 1)[1] }}</div></div><div class="payment-app-input"><input type="text" name="upi_{{ app_key }}" value="{{ settings['upi_' + app_key] }}" placeholder="{{ placeholder }}"></div><label class="check" style="margin-top:8px;"><input type="radio" name="primary_app" value="{{ app_key }}" {% if settings.upi_primary_app == app_key %}checked{% endif %}> Set as primary</label></div>{% endfor %}</div><button type="submit" class="btn-primary mt-2">💾 Save Settings</button></form></div><div class="payment-owner-section" style="border-color:#BAE6FD;background:linear-gradient(135deg,#F0F9FF,#FFF);"><h2>⚡ Auto-Verify API Keys (Optional)</h2><p>Add API keys to enable auto-detection. Leave blank for manual approval (user submits TXN ID).</p><form method="POST"><input type="hidden" name="action" value="update_api"><div class="field"><label>FamPay API Key (for @fam UPI)</label><input type="text" name="fampay_api_key" value="{{ settings.fampay_api_key }}" placeholder="FAM_xxxxx"><small>Required if UPI ends with @fam</small></div><div class="field"><label>Razorpay Key (for @ybl, @okaxis, @paytm, etc.)</label><input type="text" name="razorpay_key" value="{{ settings.razorpay_key }}" placeholder="rzp_xxxxx"><small>Required if UPI is PhonePe/GPay/Paytm/etc.</small></div><button type="submit" class="btn-primary">💾 Save API Keys</button></form></div></div>{% endblock %}"""
-
-ADMIN_SETTINGS_HTML = """{% extends "base" %}{% block title %}Settings{% endblock %}{% block content %}<div class="wrap" style="max-width:700px;"><div class="admin-hero"><div><a href="{{ url_for('admin_dashboard') }}" class="admin-back">← Admin</a><h1>Platform Settings</h1></div></div><div class="card"><h2>🎨 Logo & Branding</h2><div class="logo-preview-box"><div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><div class="logo-preview-frame">{% if settings.site_logo_url %}<img id="admin_logo_preview" src="{{ settings.site_logo_url }}" alt="">{% else %}<span>⚡</span>{% endif %}</div></div><form action="{{ url_for('admin_settings') }}" method="POST" enctype="multipart/form-data" style="flex:1;"><input type="hidden" name="action" value="upload_logo"><div style="display:flex;gap:8px;flex-wrap:wrap;"><label class="btn-secondary">📁 Choose<input type="file" name="logo" accept="image/*" style="display:none;" onchange="handleLogoPreview(this)" required></label><button type="submit" class="btn-primary">⬆️ Upload</button></div></form></div>{% if settings.site_logo_url %}<form action="{{ url_for('admin_settings') }}" method="POST" onsubmit="return confirm('Reset?');" style="margin-top:12px;"><input type="hidden" name="action" value="reset_logo"><button type="submit" class="btn-danger-outline">🗑️ Reset Logo</button></form>{% endif %}</div><div class="card"><h2>🏷️ Branding</h2><form action="{{ url_for('admin_settings') }}" method="POST"><input type="hidden" name="action" value="update_branding"><div class="field"><label>Site Name</label><input type="text" name="site_name" value="{{ settings.site_name }}" required></div><div class="field"><label>VIP Name</label><input type="text" name="vip_site_name" value="{{ settings.vip_site_name }}" required></div><button type="submit" class="btn-primary">💾 Save</button></form></div><div class="card" style="border-color:#FDE68A;background:#FFFBEB;"><h2>🎁 Trial Settings</h2><form action="{{ url_for('admin_settings') }}" method="POST"><input type="hidden" name="action" value="update_trial"><div class="toggle-box"><label class="toggle-label"><div><b>Enable Free Trial</b></div><input type="checkbox" name="trial_enabled" {% if settings.trial_enabled == '1' %}checked{% endif %} class="toggle-input"></label></div><div class="grid grid-2" style="gap:16px;"><div class="field"><label>Trial Hours</label><input type="number" name="trial_hours" value="{{ settings.trial_hours }}" min="1" max="720" required></div><div class="field"><label>Trial Project Limit</label><input type="number" name="trial_project_limit" value="{{ settings.trial_project_limit }}" min="1" max="100" required></div></div><p style="font-size:0.8rem;color:#92400E;background:#FEF3C7;padding:10px;border-radius:8px;">⚠️ IP-based: One trial per IP address</p><button type="submit" class="btn-primary mt-2">💾 Save Trial</button></form></div><div class="card"><h2>Maintenance Mode</h2><form action="{{ url_for('admin_settings') }}" method="POST"><input type="hidden" name="action" value="update_maintenance"><div class="toggle-box"><label class="toggle-label"><div><b>Enable Maintenance</b></div><input type="checkbox" name="maintenance_mode" {% if settings.maintenance_mode == '1' %}checked{% endif %} class="toggle-input"></label></div><div class="field"><label>Message</label><textarea name="maintenance_message" rows="3">{{ settings.maintenance_message }}</textarea></div><button type="submit" class="btn-primary">Save</button></form></div><div class="card"><h2>🔄 Self-Ping</h2><form action="{{ url_for('admin_settings') }}" method="POST"><input type="hidden" name="action" value="update_self_ping"><div class="toggle-box"><label class="toggle-label"><div><b>Enable Self-Ping</b></div><input type="checkbox" name="self_ping_enabled" {% if settings.self_ping_enabled == '1' %}checked{% endif %} class="toggle-input"></label></div><div class="field"><label>Interval (minutes)</label><input type="number" name="self_ping_interval" value="{{ settings.self_ping_interval }}" min="1" max="60" required></div><button type="submit" class="btn-primary">Save</button></form></div><div class="card"><h2>📦 Packages</h2><div style="display:flex;flex-direction:column;gap:12px;">{% for pkg in packages %}<div class="pkg-edit-card"><form action="{{ url_for('admin_update_pkg') }}" method="POST"><input type="hidden" name="id" value="{{ pkg.id }}"><div class="grid grid-3" style="gap:10px;margin-bottom:10px;"><div class="field" style="margin:0;"><label>Name</label><input type="text" name="name" value="{{ pkg.name }}" required></div><div class="field" style="margin:0;"><label>Price (₹)</label><input type="number" name="price" value="{{ pkg.price }}" min="0" required></div><div class="field" style="margin:0;"><label>Days</label><input type="number" name="days" value="{{ pkg.days }}" min="1" required></div></div><div class="grid grid-3" style="gap:10px;margin-bottom:10px;"><div class="field" style="margin:0;"><label>Project Limit</label><input type="number" name="project_limit" value="{{ pkg.project_limit }}" min="-1" required></div><div class="field" style="margin:0;grid-column:span 2;"><label>Features</label><input type="text" name="features" value="{{ pkg.features }}"></div></div><div style="display:flex;justify-content:space-between;border-top:1px solid #F1F5F9;padding-top:10px;"><div style="display:flex;gap:14px;"><label class="check"><input type="checkbox" name="active" value="1" {% if pkg.active %}checked{% endif %}> Active</label><label class="check"><input type="checkbox" name="is_popular" value="1" {% if pkg.is_popular %}checked{% endif %}> Popular</label></div><button type="submit" class="btn-primary btn-sm">💾 Save</button></div></form></div>{% endfor %}</div></div></div>{% endblock %}"""
-
-ADMIN_ANNOUNCEMENTS_HTML = """{% extends "base" %}{% block title %}Announcements{% endblock %}{% block content %}<div class="wrap"><div class="admin-hero"><div><a href="{{ url_for('admin_dashboard') }}" class="admin-back">← Admin</a><h1>📢 Announcements</h1></div></div><div class="card" style="border-color:#DDD6FE;"><h2>Publish New</h2><form action="{{ url_for('admin_create_ann') }}" method="POST"><div class="grid grid-2" style="gap:16px;margin-bottom:16px;"><div class="field"><label>Title</label><input type="text" name="title" required></div><div class="field"><label>Type</label><select name="type"><option value="update">🚀 Update</option><option value="info">ℹ️ Info</option><option value="warning">⚠️ Warning</option><option value="maintenance">🛠️ Maintenance</option></select></div></div><div class="field"><label>Content</label><textarea name="content" rows="4" required></textarea></div><div class="ann-options"><div style="display:flex;gap:24px;"><label class="check"><input type="checkbox" name="is_active" value="1" checked> Active</label><label class="check"><input type="checkbox" name="pinned" value="1"> Pin</label></div><button type="submit" class="btn-primary">📢 Publish</button></div></form></div><div class="card">{% for a in announcements %}<div class="ann-admin-card ann-{{ a.type }}"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;"><div><div style="display:flex;gap:6px;margin-bottom:4px;"><span class="badge badge-primary">{{ a.type|upper }}</span>{% if a.pinned %}<span class="badge badge-warn">📌</span>{% endif %}{% if a.is_active %}<span class="badge badge-success">● LIVE</span>{% endif %}</div><h3 style="margin:0;">{{ a.title }}</h3></div><div style="display:flex;gap:6px;"><form action="{{ url_for('admin_toggle_ann', aid=a.id) }}" method="POST"><button class="btn-secondary btn-sm">{% if a.is_active %}Hide{% else %}Show{% endif %}</button></form><form action="{{ url_for('admin_toggle_pin', aid=a.id) }}" method="POST"><button class="btn-secondary btn-sm">{% if a.pinned %}Unpin{% else %}Pin{% endif %}</button></form><form action="{{ url_for('admin_delete_ann', aid=a.id) }}" method="POST" onsubmit="return confirm('Delete?');"><button class="btn-danger btn-sm">🗑️</button></form></div></div><p style="font-size:0.875rem;color:#334155;white-space:pre-line;">{{ a.content }}</p></div>{% else %}<div class="empty-mini">No announcements.</div>{% endfor %}</div></div>{% endblock %}"""
-
-ADMIN_BROADCAST_HTML = """{% extends "base" %}{% block title %}Broadcast{% endblock %}{% block content %}<div class="wrap"><div class="admin-hero"><div><a href="{{ url_for('admin_dashboard') }}" class="admin-back">← Admin</a><h1>⚡ Broadcast</h1></div><div class="stat-chip">{{ users|length }} Users</div></div><div class="card"><form method="POST"><div class="field"><label>Target</label><div class="grid grid-2" style="gap:12px;"><label class="target-box"><input type="radio" name="target_type" value="all" checked onchange="pickTarget('all')"><div><b>🌐 All Users</b></div></label><label class="target-box"><input type="radio" name="target_type" value="specific" onchange="pickTarget('specific')"><div><b>👤 Specific</b></div></label></div></div><div id="specific-user" class="field" style="display:none;background:#EEF2FF;padding:14px;border-radius:10px;"><label>Select User</label><select name="target_user_id"><option value="">-- Choose --</option>{% for u in users %}<option value="{{ u.id }}">{{ u.full_name }} (@{{ u.username }})</option>{% endfor %}</select></div><div class="field"><label>Title</label><input type="text" name="title" required></div><div class="field"><label>Message</label><textarea name="message" rows="4" required></textarea></div><div style="display:flex;justify-content:flex-end;"><button type="submit" class="btn-primary">🚀 Send</button></div></form></div></div>{% endblock %}"""
-
-ADMIN_LOGS_HTML = """{% extends "base" %}{% block title %}Logs{% endblock %}{% block content %}<div class="wrap"><div class="admin-hero"><div><a href="{{ url_for('admin_dashboard') }}" class="admin-back">← Admin</a><h1>📜 Audit Logs</h1></div></div><div class="card">{% for log in logs %}<div class="mini-row"><div><div style="display:flex;gap:8px;"><span class="badge badge-primary">{{ log.action }}</span><b>@{{ log.admin_username }}</b></div><div style="font-size:0.82rem;margin-top:4px;"><b>Target:</b> {{ log.target }}{% if log.details %} • {{ log.details }}{% endif %}</div></div><span class="muted-sm mono">{{ log.created_at|format_datetime }}</span></div>{% else %}<div class="empty-mini">No logs.</div>{% endfor %}</div></div>{% endblock %}"""
-
-# Register base template loader
-import jinja2
-class _DictLoader(jinja2.BaseLoader):
-    def __init__(self, m): self.m = m
-    def get_source(self, env, t):
-        if t not in self.m: raise jinja2.TemplateNotFound(t)
-        return self.m[t], f"{t}.html", lambda: False
-
-_TEMPLATES = {
-    'base': BASE_HTML, 'home': HOME_HTML, 'signin': SIGNIN_HTML, 'signup': SIGNUP_HTML,
-    'dashboard': DASHBOARD_HTML, 'packages': PACKAGES_HTML, 'checkout': CHECKOUT_HTML,
-    'payment': PAYMENT_HTML, 'create_server': CREATE_SERVER_HTML,
-    'server_manage': SERVER_MANAGE_HTML, 'file_manager': FILE_MANAGER_HTML,
-    'account': ACCOUNT_HTML, 'admin_dashboard': ADMIN_DASHBOARD_HTML,
-    'admin_orders': ADMIN_ORDERS_HTML, 'admin_plans': ADMIN_PLANS_HTML,
-    'admin_trials': ADMIN_TRIALS_HTML, 'admin_notifications': ADMIN_NOTIFICATIONS_HTML,
-    'admin_users': ADMIN_USERS_HTML, 'admin_payments': ADMIN_PAYMENTS_HTML,
-    'admin_settings': ADMIN_SETTINGS_HTML, 'admin_announcements': ADMIN_ANNOUNCEMENTS_HTML,
-    'admin_broadcast': ADMIN_BROADCAST_HTML, 'admin_logs': ADMIN_LOGS_HTML,
-}
-app.jinja_loader = _DictLoader(_TEMPLATES)
-
-# ============================================================
-# ERROR HANDLERS
-# ============================================================
-@app.errorhandler(404)
-def _e404(e): return render_template_string(BASE_HTML.replace('{% block content %}{% endblock %}', '<div class="wrap" style="max-width:480px;text-align:center;margin-top:40px;"><div class="card" style="padding:40px;"><div style="font-size:3rem;">🔍</div><h1>Page Not Found</h1><a href="/" class="btn-primary btn-lg">← Home</a></div></div>')), 404
-
-@app.errorhandler(500)
-def _e500(e): return render_template_string(BASE_HTML.replace('{% block content %}{% endblock %}', '<div class="wrap" style="max-width:480px;text-align:center;margin-top:40px;"><div class="card" style="padding:40px;"><div style="font-size:3rem;">⚠️</div><h1>Server Error</h1><a href="/" class="btn-primary btn-lg">← Home</a></div></div>')), 500
-
-@app.errorhandler(403)
-def _e403(e): return render_template_string(BASE_HTML.replace('{% block content %}{% endblock %}', '<div class="wrap" style="max-width:480px;text-align:center;margin-top:40px;"><div class="card" style="padding:40px;"><div style="font-size:3rem;">🛡️</div><h1>Forbidden</h1><a href="/" class="btn-primary btn-lg">← Home</a></div></div>')), 403
-
-# ============================================================
-# MAIN
-# ============================================================
-if __name__ == '__main__':
-    PORT = int(os.environ.get('PORT', 3000))
-    print("=" * 55)
-    print(f"  HOSTX VIP — Running on http://0.0.0.0:{PORT}")
-    print("=" * 55)
-    app.run(host='0.0.0.0', port=PORT, debug=False)
+SERVER_MANAGE_HTML = """{% extends "base" %}{% block title %}{{ server.name }}{% endblock %}{% block content %}<div class="wrap"><div class="back-row"><a href="{{ url_for('dashboard') }}" class="back-btn">← Back</a></div><div class="card server-header-card"><div><div class="server-tag">Server #{{ server.id }}</div><h1>Server: <span class="gradient-text">{{ server.name }}</span></h1></div><div class="server-header-right"><span id="status-badge" class="status status-{{ server.status }}">{% if server.status=='running' %}🟢 RUNNING{% elif server.status=='package_required' %}🟡 SETUP{% else %}🔴 STOPPED{% endif %}</span></div></div><div class="url-card" id="url-card" style="display:none;"><div class="url-card-label">🌐 YOUR PROJECT URL</div><div class="url-row"><input type="text" id="server-url-input" readonly class="url-input"><button onclick="copyServerUrl()" class="btn-primary btn-sm">📋 Copy</button><a id="open-url-btn" href="#" target="_blank" class="btn-secondary btn-sm">🔗 Open</a></div></div><div class="subnav"><a href="{{ url_for('server_manage', server_id=server.id) }}" class="subnav-item active">📊 Logs</a><a href="{{ url_for('file_manager', server_id=server.id) }}" class="subnav-item">📁 Files</a></div><div class="card"><div class="ops-head"><h2>Server Operations</h2><span id="pid-badge" class="pid-badge {% if server.status=='running' and server.pid %}pid-on{% endif %}">PID: {% if server.status=='running' and server.pid %}{{ server.pid }}{% else %}Offline{% endif %}</span></div><div class="ops-grid"><button id="btn-start" onclick="serverAction({{ server.id }}, 'start')" class="btn-success" {% if server.status == 'running' %}disabled{% endif %}>🟢 START</button><button id="btn-restart" onclick="serverAction({{ server.id }}, 'restart')" class="btn-warning">🟠 RESTART</button><button id="btn-stop" onclick="serverAction({{ server.id }}, 'stop')" class="btn-danger" {% if server.status in ['stopped','package_required'] %}disabled{% endif %}>🔴 STOP</button></div><div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;"><button onclick="if(confirm('Delete this project and ALL its files? This cannot be undone.')){fetch('/api/servers/{{ server.id }}/delete',{method:'POST'}).then(r=>r.json()).then(d=>{if(d.success){showToast(d.message,'success');setTimeout(()=>window.location.href='/dashboard',1200);}else{showToast(d.message,'danger');}});}" class="btn-danger-outline btn-sm">🗑️ Delete Project</button></div></div><div class="card"><div class="ops-head"><div style="display:flex;align-items:center;gap:8px;"><h2 style="margin:0;">📜 Server Console</h2><span class="dot-pulse"></span></div><button onclick="clearLogs({{ server.id }})" class="btn-secondary btn-sm">🧹 Clear</button></div><div id="terminal" class="terminal" data-server-id="{{ server.id }}"><div class="log-line log-info">[INFO] Waiting for server...</div></div><div class="terminal-input-row"><input type="text" id="terminal-input" placeholder="Type command..." onkeydown="if(event.key==='Enter'){sendTerminalCommand();}"><button onclick="sendTerminalCommand()" class="btn-primary">▶ Run</button></div><div class="quick-cmds"><button onclick="quickCommand('ls -la')" class="btn-secondary btn-sm">📁 ls</button><button onclick="quickCommand('pip list')" class="btn-secondary btn-sm">📋 pip list</button><button onclick="quickCommand('python --version')" class="btn-secondary btn-sm">🐍 Python</button></div></div><div class="meta-grid"><div class="stat-card"><div class="stat-label">Entry File</div><div class="stat-value mono" style="font-size:0.9rem;">{{ server.entry_file or 'Not set' }}</div></div><div class="stat-card"><div style="display:flex;justify-content:space-between;"><div class="stat-label">Status</div><div id="uptime-tick" class="mono-tick">00:00:00</div></div><div style="display:flex;align-items:center;gap:6px;margin-top:3px;"><span id="status-dot" class="status-dot {% if server.status=='running' %}on{% endif %}"></span><span id="status-text" class="status-text {% if server.status=='running' %}on{% endif %}">{% if server.status=='running' %}Running{% else %}Offline{% endif %}</span></div></div><div class="
