@@ -7,10 +7,18 @@ import sys
 import hashlib
 
 # ============================================================
+# ============================================================
 # LICENCE VERIFICATION
 # ============================================================
-LICENCE_HASH = "9bb144b7c3c1e3820cddad4dd35bee0ac7cebdef6e2e301c8c23b96c823bbcba"
+VALID_LICENCE_HASHES = [
+    "d9c5387921eb203ba99d9b6adbe852db48a63e7b41c1847732270d5cfb0ad426",   # riyajmughal
+    "d9b86c7410b80c2c4847ab9a62ab1536e679444b25aacef0db687882fce1d6a4",   # riyaj
+    "97828747c7789f565bb0e61dc267183ab5727e0965d90420be3515d8322e0c9b",   # riyajbaig
+    "3d05ba07263b6fee38f046fe22a0400cb5c333de30f990306fd98042b0195113",   # ryjmg_the_boss_2026
+    "c76786198d837fb6bfe021b8d6950e89c713ad56d52f7bc6819425c154be11b2",   # Host-bot-hai-lala
+]
 LICENCE_ENV_VAR = "HOSTX_LICENCE_KEY"
+
 
 def _load_dotenv():
     env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
@@ -32,6 +40,7 @@ def _load_dotenv():
     except Exception:
         return False
 
+
 def _verify_licence():
     _load_dotenv()
     key = os.environ.get(LICENCE_ENV_VAR, "").strip()
@@ -51,15 +60,15 @@ def _verify_licence():
         print("  [X] Empty key. Exiting.")
         sys.exit(1)
     key_hash = hashlib.sha256(key.encode('utf-8')).hexdigest()
-    if key_hash != LICENCE_HASH:
+    if key_hash not in VALID_LICENCE_HASHES:
         print("\n  [X] INVALID LICENCE KEY")
         print("  [X] Please contact support.")
         sys.exit(1)
     print("  [OK] Licence verified successfully.")
     print("=" * 60 + "\n")
 
-_verify_licence()
 
+_verify_licence()
 # ============================================================
 # IMPORTS
 # ============================================================
